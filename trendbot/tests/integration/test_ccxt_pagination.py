@@ -103,12 +103,24 @@ def test_ccxt_single_page_fetch():
 
 
 def test_ccxt_symbol_mapping():
-    """Verify that bare symbols are mapped to Binance pair format."""
+    """Verify that various symbol formats are mapped to Binance pair format."""
     from trendbot.infrastructure.data_providers.ccxt_provider import _symbol_to_binance_pair
 
+    # Plain base format
     assert _symbol_to_binance_pair("BTC") == "BTC/USDT"
     assert _symbol_to_binance_pair("eth") == "ETH/USDT"
+
+    # Yahoo Finance format
+    assert _symbol_to_binance_pair("BTC-USD") == "BTC/USDT"
+    assert _symbol_to_binance_pair("ETH-USD") == "ETH/USDT"
+    assert _symbol_to_binance_pair("SOL-USD") == "SOL/USDT"
+
+    # Already in CCXT format
     assert _symbol_to_binance_pair("BTC/USDC") == "BTC/USDC"
+    assert _symbol_to_binance_pair("SOL/USDC") == "SOL/USDC"
+    assert _symbol_to_binance_pair("btc/usdt") == "BTC/USDT"
+
+    # Custom quote currency
     assert _symbol_to_binance_pair("SOL", "USDC") == "SOL/USDC"
 
 

@@ -22,13 +22,28 @@ TIMEFRAME_MAP = {
 
 
 def _symbol_to_binance_pair(symbol: str, quote_currency: str = "USDT") -> str:
-    """Map a bare ticker like 'BTC' to Binance spot pair 'BTC/USDT'.
+    """Map user inputs to valid CCXT/Binance symbols.
 
-    If the symbol already contains a slash, return it unchanged.
+    Handles: BTC-USD (Yahoo), BTC (bare), BTC/USDT (already correct).
     """
-    if "/" in symbol:
-        return symbol.upper()
-    return f"{symbol.upper()}/{quote_currency.upper()}"
+    symbol = symbol.upper().strip()
+
+    # 1. Handle Yahoo Finance format (e.g., BTC-USD -> BTC/USDT)
+    if "-" in symbol:
+        parts = symbol.split("-")
+        base = parts[0]
+        quote = parts[1]
+        # Binance uses USDT instead of USD for fiat-pegged pairs
+        if quote == "USD":
+            quote = "USDT"
+        return f"{base}/{quote}"
+
+    # 2. Handle plain base format (e.g., BTC -> BTC/USDT)
+    if "/" not in symbol:
+        return f"{symbol}/{quote_currency.upper()}"
+
+    # 3. Already in CCXT format (e.g., BTC/USDT)
+    return symbol
 
 
 class CcxtProvider(DataProvider):
