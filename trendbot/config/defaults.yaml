@@ -1,0 +1,40 @@
+data:
+  source: yfinance
+  timeframe: 1d
+  start_date: "2018-01-01"
+  end_date: null
+  overwrite: false
+
+universe:
+  - BTC-USD
+  - ETH-USD
+  - SOL-USD
+  - SPY
+  - QQQ
+  - GLD
+  - TLT
+
+strategy:
+  lookbacks:
+    - 5
+    - 10
+    - 21
+    - 42
+  allow_short: true
+
+volatility:
+  vol_window: 21
+  ann_factor: 365
+
+risk:
+  target_portfolio_vol: 0.10
+  max_gross_leverage: 1.0
+
+execution:
+  fee_bps: 5.0
+  slippage_bps: 5.0
+  rebalance_threshold: 0.01
+
+backtest:
+  min_history: 60
+  benchmark: equal_weight
