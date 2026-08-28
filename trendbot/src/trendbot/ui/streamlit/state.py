@@ -22,6 +22,8 @@ def init_state() -> None:
         defaults = load_defaults()
 
         st.session_state.data_source = defaults["data"]["source"]
+        st.session_state.timeframe = defaults["data"].get("timeframe", "1d")
+        st.session_state.quote_currency = defaults["data"].get("quote_currency", "USDT")
         st.session_state.start_date = defaults["data"]["start_date"]
         st.session_state.end_date = defaults["data"].get("end_date")
         st.session_state.overwrite = defaults["data"]["overwrite"]
@@ -36,8 +38,9 @@ def init_state() -> None:
         st.session_state.target_portfolio_vol = defaults["risk"]["target_portfolio_vol"]
         st.session_state.max_gross_leverage = defaults["risk"]["max_gross_leverage"]
 
-        st.session_state.fee_bps = defaults["execution"]["fee_bps"]
-        st.session_state.slippage_bps = defaults["execution"]["slippage_bps"]
+        st.session_state.taker_fee_pct = defaults["execution"]["taker_fee_pct"]
+        st.session_state.maker_fee_pct = defaults["execution"]["maker_fee_pct"]
+        st.session_state.slippage_pct = defaults["execution"]["slippage_pct"]
         st.session_state.rebalance_threshold = defaults["execution"]["rebalance_threshold"]
 
         st.session_state.min_history = defaults["backtest"]["min_history"]
@@ -94,7 +97,7 @@ def get_backtest_request(symbols: list[str]) -> BacktestRequest:
             if isinstance(st.session_state.start_date, str)
             else st.session_state.start_date,
             "end_date": end,
-            "timeframe": "1d",
+            "timeframe": st.session_state.timeframe,
         },
         momentum=MomentumParams(
             lookbacks=st.session_state.lookbacks,
@@ -109,8 +112,9 @@ def get_backtest_request(symbols: list[str]) -> BacktestRequest:
             max_gross_leverage=st.session_state.max_gross_leverage,
         ),
         execution=ExecutionParams(
-            fee_bps=st.session_state.fee_bps,
-            slippage_bps=st.session_state.slippage_bps,
+            taker_fee_pct=st.session_state.taker_fee_pct,
+            maker_fee_pct=st.session_state.maker_fee_pct,
+            slippage_pct=st.session_state.slippage_pct,
             rebalance_threshold=st.session_state.rebalance_threshold,
         ),
         backtest=BacktestParams(

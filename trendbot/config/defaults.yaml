@@ -1,14 +1,15 @@
 data:
-  source: yfinance
+  source: binance
   timeframe: 1d
+  quote_currency: USDT
   start_date: "2018-01-01"
   end_date: null
   overwrite: false
 
 universe:
-  - BTC-USD
-  - ETH-USD
-  - SOL-USD
+  - BTC
+  - ETH
+  - SOL
   - SPY
   - QQQ
   - GLD
@@ -31,8 +32,9 @@ risk:
   max_gross_leverage: 1.0
 
 execution:
-  fee_bps: 5.0
-  slippage_bps: 5.0
+  taker_fee_pct: 0.001
+  maker_fee_pct: 0.0005
+  slippage_pct: 0.0005
   rebalance_threshold: 0.01
 
 backtest:

@@ -21,6 +21,8 @@ class DataDownloadRequest(BaseModel):
     start_date: date
     end_date: date | None = None
     overwrite: bool = False
+    timeframe: str = "1d"
+    quote_currency: str = "USDT"
 
 
 class BacktestDataSelection(BaseModel):
@@ -84,15 +86,16 @@ class RiskParams(BaseModel):
 
 
 class ExecutionParams(BaseModel):
-    fee_bps: float = 5.0
-    slippage_bps: float = 5.0
+    taker_fee_pct: float = 0.001
+    maker_fee_pct: float = 0.0005
+    slippage_pct: float = 0.0005
     rebalance_threshold: float = 0.01
 
-    @field_validator("fee_bps", "slippage_bps")
+    @field_validator("taker_fee_pct", "maker_fee_pct", "slippage_pct")
     @classmethod
-    def validate_bps(cls, v: float) -> float:
+    def validate_pct_non_negative(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("Fee and slippage bps must be non-negative")
+            raise ValueError("Fee and slippage percentages must be non-negative")
         return v
 
     @field_validator("rebalance_threshold")
@@ -139,6 +142,7 @@ class DatasetMetadata(BaseModel):
 class BacktestResult(BaseModel):
     stats: dict[str, float]
     returns: object  # pd.Series
+    gross_returns: object  # pd.Series
     positions: object  # pd.DataFrame
     executed_weights: object  # pd.DataFrame
     turnover: object  # pd.Series

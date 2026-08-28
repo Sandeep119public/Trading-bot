@@ -131,22 +131,24 @@ def render_strategy_params() -> None:
 
     with col4:
         st.markdown("**Execution**")
-        st.session_state.fee_bps = st.number_input(
-            "Fee (bps)",
+        st.session_state.taker_fee_pct = st.number_input(
+            "Taker Fee (%)",
             min_value=0.0,
-            max_value=100.0,
-            value=st.session_state.fee_bps,
-            step=0.5,
+            max_value=10.0,
+            value=st.session_state.taker_fee_pct * 100,
+            step=0.01,
+            format="%.2f",
             key="fee_input",
-        )
-        st.session_state.slippage_bps = st.number_input(
-            "Slippage (bps)",
+        ) / 100.0
+        st.session_state.slippage_pct = st.number_input(
+            "Slippage (%)",
             min_value=0.0,
-            max_value=100.0,
-            value=st.session_state.slippage_bps,
-            step=0.5,
+            max_value=10.0,
+            value=st.session_state.slippage_pct * 100,
+            step=0.01,
+            format="%.2f",
             key="slip_input",
-        )
+        ) / 100.0
         st.session_state.rebalance_threshold = st.number_input(
             "Rebalance Threshold",
             min_value=0.0,

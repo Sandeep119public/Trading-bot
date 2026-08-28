@@ -9,29 +9,47 @@ def render_execution_params() -> None:
     """Render execution parameters configuration."""
     st.subheader("Execution Parameters")
 
-    col1, col2, col3 = st.columns(3)
+    if st.button("Binance Spot Default", key="binance_preset"):
+        st.session_state.taker_fee_pct = 0.001
+        st.session_state.maker_fee_pct = 0.0005
+        st.session_state.slippage_pct = 0.0005
+
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.session_state.fee_bps = st.number_input(
-            "Fee (bps)",
+        st.session_state.taker_fee_pct = st.number_input(
+            "Taker Fee (%)",
             min_value=0.0,
-            max_value=100.0,
-            value=st.session_state.fee_bps,
-            step=0.5,
-            key="exec_fee",
-        )
+            max_value=10.0,
+            value=st.session_state.taker_fee_pct * 100,
+            step=0.01,
+            format="%.2f",
+            key="exec_taker_fee",
+        ) / 100.0
 
     with col2:
-        st.session_state.slippage_bps = st.number_input(
-            "Slippage (bps)",
+        st.session_state.maker_fee_pct = st.number_input(
+            "Maker Fee (%)",
             min_value=0.0,
-            max_value=100.0,
-            value=st.session_state.slippage_bps,
-            step=0.5,
-            key="exec_slip",
-        )
+            max_value=10.0,
+            value=st.session_state.maker_fee_pct * 100,
+            step=0.01,
+            format="%.2f",
+            key="exec_maker_fee",
+        ) / 100.0
 
     with col3:
+        st.session_state.slippage_pct = st.number_input(
+            "Slippage (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=st.session_state.slippage_pct * 100,
+            step=0.01,
+            format="%.2f",
+            key="exec_slippage",
+        ) / 100.0
+
+    with col4:
         st.session_state.rebalance_threshold = st.number_input(
             "Rebalance Threshold",
             min_value=0.0,

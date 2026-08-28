@@ -21,8 +21,8 @@ def run_backtest(
     ann_factor: int,
     target_portfolio_vol: float,
     max_gross_leverage: float,
-    fee_bps: float,
-    slippage_bps: float,
+    taker_fee_pct: float,
+    slippage_pct: float,
     rebalance_threshold: float,
     min_history: int,
 ) -> dict[str, pd.DataFrame | pd.Series]:
@@ -36,8 +36,8 @@ def run_backtest(
         ann_factor: Annualization factor.
         target_portfolio_vol: Target portfolio volatility.
         max_gross_leverage: Maximum gross leverage.
-        fee_bps: Trading fee in basis points.
-        slippage_bps: Slippage in basis points.
+        taker_fee_pct: Taker fee as a decimal fraction (e.g. 0.001 = 0.1%).
+        slippage_pct: Slippage as a decimal fraction (e.g. 0.0005 = 0.05%).
         rebalance_threshold: Minimum weight change to trigger rebalance.
         min_history: Minimum bars before trading starts.
 
@@ -82,10 +82,11 @@ def run_backtest(
     turnover_arr = np.abs(diff).sum(axis=1)
     turnover_arr[0] = np.abs(positions_arr[0]).sum()
 
-    cost_rate = (fee_bps + slippage_bps) / 10000
+    cost_rate = taker_fee_pct + slippage_pct
     costs_arr = turnover_arr * cost_rate
 
-    ret_arr = (positions_arr * daily_returns.values).sum(axis=1) - costs_arr
+    gross_ret_arr = (positions_arr * daily_returns.values).sum(axis=1)
+    ret_arr = gross_ret_arr - costs_arr
 
     history_mask = np.zeros(n_bars, dtype=bool)
     if min_history > 0 and n_bars > min_history:
@@ -94,12 +95,14 @@ def run_backtest(
         history_mask[:] = True
 
     ret_arr = np.where(history_mask, ret_arr, 0.0)
+    gross_ret_arr = np.where(history_mask, gross_ret_arr, 0.0)
     positions_arr = np.where(history_mask[:, None], positions_arr, 0.0)
     executed_arr = np.where(history_mask[:, None], executed_arr, 0.0)
     turnover_arr = np.where(history_mask, turnover_arr, 0.0)
     costs_arr = np.where(history_mask, costs_arr, 0.0)
 
     returns = pd.Series(ret_arr, index=idx, name="returns")
+    gross_returns = pd.Series(gross_ret_arr, index=idx, name="gross_returns")
     positions = pd.DataFrame(positions_arr, index=idx, columns=cols)
     executed_weights = pd.DataFrame(executed_arr, index=idx, columns=cols)
     turnover = pd.Series(turnover_arr, index=idx, name="turnover")
@@ -107,6 +110,7 @@ def run_backtest(
 
     return {
         "returns": returns,
+        "gross_returns": gross_returns,
         "positions": positions,
         "executed_weights": executed_weights,
         "turnover": turnover,

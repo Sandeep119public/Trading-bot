@@ -12,18 +12,20 @@ def compute_metrics(
     turnover: pd.Series,
     costs: pd.Series,
     ann_factor: int = 365,
+    gross_returns: pd.Series | None = None,
 ) -> dict[str, float]:
     """Compute comprehensive backtest performance metrics.
 
     Args:
-        returns: Strategy daily returns.
+        returns: Strategy daily returns (net of fees).
         positions: Position weights over time.
         turnover: Daily turnover.
         costs: Daily trading costs.
         ann_factor: Annualization factor.
+        gross_returns: Strategy daily returns before fees (optional, for fee diagnostics).
 
     Returns:
-        Dictionary of performance metrics.
+        Dictionary of performance metrics including fee impact diagnostics.
     """
     if len(returns) == 0:
         return _empty_metrics()
@@ -56,6 +58,21 @@ def compute_metrics(
     avg_turnover = turnover.mean()
     total_cost_drag = costs.sum()
 
+    total_gross_return = 0.0
+    total_net_return = float(total_return)
+    fee_drag_pct = 0.0
+
+    if gross_returns is not None and len(gross_returns) > 1:
+        active_gross = gross_returns.iloc[1:] if len(gross_returns) > 1 else gross_returns.iloc[:0]
+        if len(active_gross) > 0:
+            total_gross_return = float((1 + active_gross).prod() - 1)
+            if abs(total_gross_return) > 1e-15:
+                fee_drag_pct = (total_gross_return - total_net_return) / abs(total_gross_return)
+            elif abs(total_net_return) < 1e-15:
+                fee_drag_pct = 0.0
+            else:
+                fee_drag_pct = 1.0
+
     return {
         "total_return": float(total_return),
         "cagr": float(cagr),
@@ -67,6 +84,9 @@ def compute_metrics(
         "avg_gross_exposure": float(avg_gross),
         "avg_daily_turnover": float(avg_turnover),
         "total_cost_drag": float(total_cost_drag),
+        "total_gross_return": total_gross_return,
+        "total_net_return": total_net_return,
+        "fee_drag_pct": float(fee_drag_pct),
     }
 
 
@@ -83,6 +103,9 @@ def _empty_metrics() -> dict[str, float]:
         "avg_gross_exposure": 0.0,
         "avg_daily_turnover": 0.0,
         "total_cost_drag": 0.0,
+        "total_gross_return": 0.0,
+        "total_net_return": 0.0,
+        "fee_drag_pct": 0.0,
     }
 
 

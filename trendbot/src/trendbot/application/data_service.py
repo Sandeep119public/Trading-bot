@@ -32,26 +32,40 @@ class DataService:
         """
         processed: list[str] = []
         failed: list[str] = []
+        timeframe = getattr(request, "timeframe", "1d") or "1d"
 
         for symbol in request.symbols:
             try:
                 if not request.overwrite and self._repository.dataset_exists(
-                    request.source, symbol, "1d"
+                    request.source, symbol, timeframe
                 ):
                     logger.info("Skipping %s (already exists, overwrite=False)", symbol)
                     processed.append(symbol)
                     continue
 
-                df = self._provider.fetch_daily_close_prices(
-                    symbol, request.start_date, request.end_date
-                )
+                if request.source == "binance":
+                    from trendbot.infrastructure.data_providers.ccxt_provider import (
+                        CcxtProvider,
+                    )
+
+                    provider = CcxtProvider(
+                        quote_currency=getattr(request, "quote_currency", "USDT"),
+                        timeframe=timeframe,
+                    )
+                    df = provider.fetch_daily_close_prices(
+                        symbol, request.start_date, request.end_date
+                    )
+                else:
+                    df = self._provider.fetch_daily_close_prices(
+                        symbol, request.start_date, request.end_date
+                    )
 
                 if df.empty:
                     logger.warning("Empty data for %s", symbol)
                     failed.append(f"{symbol}: empty data")
                     continue
 
-                self._repository.save_prices(request.source, symbol, "1d", df)
+                self._repository.save_prices(request.source, symbol, timeframe, df)
                 processed.append(symbol)
                 logger.info("Downloaded %s: %d rows", symbol, len(df))
 

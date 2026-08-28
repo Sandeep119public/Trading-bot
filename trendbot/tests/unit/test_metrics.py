@@ -45,6 +45,9 @@ def test_metrics_keys(sample_returns, sample_positions):
         "avg_gross_exposure",
         "avg_daily_turnover",
         "total_cost_drag",
+        "total_gross_return",
+        "total_net_return",
+        "fee_drag_pct",
     ]
     for key in expected_keys:
         assert key in metrics

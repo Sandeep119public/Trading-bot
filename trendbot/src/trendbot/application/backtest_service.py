@@ -79,8 +79,8 @@ class BacktestService:
             ann_factor=vol.ann_factor,
             target_portfolio_vol=risk.target_portfolio_vol,
             max_gross_leverage=risk.max_gross_leverage,
-            fee_bps=exec_.fee_bps,
-            slippage_bps=exec_.slippage_bps,
+            taker_fee_pct=exec_.taker_fee_pct,
+            slippage_pct=exec_.slippage_pct,
             rebalance_threshold=exec_.rebalance_threshold,
             min_history=bt.min_history,
         )
@@ -93,11 +93,13 @@ class BacktestService:
             turnover=bt_result["turnover"],
             costs=bt_result["costs"],
             ann_factor=vol.ann_factor,
+            gross_returns=bt_result["gross_returns"],
         )
 
         return BacktestResult(
             stats=metrics,
             returns=bt_result["returns"],
+            gross_returns=bt_result["gross_returns"],
             positions=bt_result["positions"],
             executed_weights=bt_result["executed_weights"],
             turnover=bt_result["turnover"],
