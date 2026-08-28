@@ -36,4 +36,4 @@ echo The app will open at http://localhost:8501
 echo Press Ctrl+C to stop.
 echo.
 
-streamlit run "%STREAMLIT_APP%"
+streamlit run "%STREAMLIT_APP%" --server.headless true

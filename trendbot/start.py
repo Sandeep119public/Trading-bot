@@ -102,7 +102,7 @@ def run_streamlit() -> None:
     print("Press Ctrl+C to stop.")
     print()
     subprocess.run(
-        [str(streamlit), "run", str(STREAMLIT_APP)],
+        [str(streamlit), "run", str(STREAMLIT_APP), "--server.headless", "true"],
         cwd=str(SCRIPT_DIR),
         check=True,
     )

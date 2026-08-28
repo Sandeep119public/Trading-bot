@@ -16,7 +16,7 @@ setup:
 # --- Run ---
 run:
 	@if [ ! -d "$(VENV_DIR)" ]; then $(MAKE) setup; fi
-	@. $(VENV_DIR)/bin/activate && streamlit run $(STREAMLIT_APP)
+	@. $(VENV_DIR)/bin/activate && streamlit run $(STREAMLIT_APP) --server.headless true
 
 # --- Test ---
 test:
