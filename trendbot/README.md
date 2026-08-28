@@ -2,19 +2,31 @@
 
 Multi-horizon trend-following backtesting application.
 
-## Installation
+## Quick Start
 
+**Mac / Linux:**
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+chmod +x start.sh
+./start.sh
 ```
 
-## Usage
-
-```bash
-streamlit run src/trendbot/ui/streamlit/app.py
+**Windows Command Prompt:**
+```bat
+start.bat
 ```
+
+**Any OS (Python 3.11+ required):**
+```bash
+python start.py
+```
+
+**Or use Make (Mac/Linux):**
+```bash
+make setup   # First time only: creates venv, installs deps
+make run     # Start the Streamlit app
+```
+
+These scripts automatically create a virtual environment, install all dependencies, set up required data directories, and launch the Streamlit UI at `http://localhost:8501`.
 
 ## Architecture
 
@@ -41,12 +53,13 @@ Multi-horizon momentum with volatility targeting:
 - Sizing: Risk-budgeted weights scaled by asset volatility
 - Execution: Rebalance threshold, transaction costs, 1-day lag
 
-## Testing
+## Development
 
 ```bash
-pytest                    # Run all tests
-ruff check .             # Lint
-mypy src                  # Type check
+make test      # Run all tests
+make lint      # Lint with ruff
+make typecheck # Type check with mypy
+make clean     # Remove venv, caches, and data directories
 ```
 
 ## Configuration

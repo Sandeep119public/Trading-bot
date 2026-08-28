@@ -1,21 +1,53 @@
-.PHONY: install lint typecheck test ui clean
+.PHONY: setup run test lint typecheck ui clean
 
-install:
-	pip install -e ".[dev]"
+VENV_DIR := .venv
+PYTHON   := python3
+STREAMLIT_APP := src/trendbot/ui/streamlit/app.py
 
-lint:
-	ruff check .
+# --- Setup ---
+setup:
+	@echo "Creating virtual environment..."
+	@$(PYTHON) -m venv $(VENV_DIR)
+	@echo "Installing dependencies..."
+	@. $(VENV_DIR)/bin/activate && pip install -e ".[dev]" -q
+	@mkdir -p data/raw data/metadata output
+	@echo "Setup complete. Run 'make run' to start."
 
-typecheck:
-	mypy src
+# --- Run ---
+run:
+	@if [ ! -d "$(VENV_DIR)" ]; then $(MAKE) setup; fi
+	@. $(VENV_DIR)/bin/activate && streamlit run $(STREAMLIT_APP)
 
+# --- Test ---
 test:
-	pytest
+	@if [ -d "$(VENV_DIR)" ]; then \
+		. $(VENV_DIR)/bin/activate && pytest; \
+	else \
+		pytest; \
+	fi
 
-ui:
-	streamlit run src/trendbot/ui/streamlit/app.py
+# --- Lint ---
+lint:
+	@if [ -d "$(VENV_DIR)" ]; then \
+		. $(VENV_DIR)/bin/activate && ruff check .; \
+	else \
+		ruff check .; \
+	fi
 
+# --- Typecheck ---
+typecheck:
+	@if [ -d "$(VENV_DIR)" ]; then \
+		. $(VENV_DIR)/bin/activate && mypy src; \
+	else \
+		mypy src; \
+	fi
+
+# --- UI (legacy alias) ---
+ui: run
+
+# --- Clean ---
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	rm -rf .mypy_cache .ruff_cache .pytest_cache
+	rm -rf $(VENV_DIR) .mypy_cache .ruff_cache .pytest_cache
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	rm -rf data output
