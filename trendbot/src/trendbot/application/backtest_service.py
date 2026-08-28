@@ -94,6 +94,7 @@ class BacktestService:
             costs=bt_result["costs"],
             ann_factor=vol.ann_factor,
             gross_returns=bt_result["gross_returns"],
+            min_history=bt.min_history,
         )
 
         return BacktestResult(
