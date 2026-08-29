@@ -21,31 +21,6 @@ TIMEFRAME_MAP = {
 }
 
 
-def _symbol_to_binance_pair(symbol: str, quote_currency: str = "USDT") -> str:
-    """Map user inputs to valid CCXT/Binance symbols.
-
-    Handles: BTC-USD (Yahoo), BTC (bare), BTC/USDT (already correct).
-    """
-    symbol = symbol.upper().strip()
-
-    # 1. Handle Yahoo Finance format (e.g., BTC-USD -> BTC/USDT)
-    if "-" in symbol:
-        parts = symbol.split("-")
-        base = parts[0]
-        quote = parts[1]
-        # Binance uses USDT instead of USD for fiat-pegged pairs
-        if quote == "USD":
-            quote = "USDT"
-        return f"{base}/{quote}"
-
-    # 2. Handle plain base format (e.g., BTC -> BTC/USDT)
-    if "/" not in symbol:
-        return f"{symbol}/{quote_currency.upper()}"
-
-    # 3. Already in CCXT format (e.g., BTC/USDT)
-    return symbol
-
-
 class CcxtProvider(DataProvider):
     """Data provider using CCXT for Binance exchange data.
 
@@ -83,6 +58,53 @@ class CcxtProvider(DataProvider):
         except AttributeError:
             raise ValueError("Exchange 'binance' not found in ccxt")
 
+    @staticmethod
+    def _normalize_symbol(symbol: str, quote_currency: str = "USDT") -> str:
+        """Convert user inputs into valid CCXT/Binance symbols.
+
+        Handles Yahoo Finance format (BTC-USD), bare tickers (BTC),
+        and already-correct CCXT format (BTC/USDT).
+
+        Args:
+            symbol: User-provided ticker symbol.
+            quote_currency: Quote currency for bare tickers (default USDT).
+
+        Returns:
+            Normalized CCXT pair string (e.g., 'BTC/USDT').
+        """
+        symbol = symbol.upper().strip()
+
+        # 1. Handle Yahoo Finance format (e.g., BTC-USD -> BTC/USDT)
+        if "-" in symbol:
+            parts = symbol.split("-")
+            base = parts[0]
+            quote = parts[1]
+            if quote == "USD":
+                quote = "USDT"
+            return f"{base}/{quote}"
+
+        # 2. Handle plain base format (e.g., BTC -> BTC/USDT)
+        if "/" not in symbol:
+            return f"{symbol}/{quote_currency.upper()}"
+
+        # 3. Already in CCXT format (e.g., BTC/USDT)
+        return symbol
+
+    @staticmethod
+    def _sanitize_for_path(symbol: str) -> str:
+        """Sanitize a symbol for use in file system paths.
+
+        Replaces slashes with dashes to prevent directory traversal issues
+        when saving to Parquet files.
+
+        Args:
+            symbol: Symbol to sanitize (e.g., 'BTC/USDT').
+
+        Returns:
+            Path-safe symbol (e.g., 'BTC-USDT').
+        """
+        return symbol.replace("/", "-")
+
     def fetch_daily_close_prices(
         self,
         symbol: str,
@@ -92,18 +114,18 @@ class CcxtProvider(DataProvider):
         """Fetch daily close prices from Binance with automatic pagination.
 
         Args:
-            symbol: Ticker symbol (e.g., 'BTC', 'ETH', 'BTC/USDT').
+            symbol: Ticker symbol (e.g., 'BTC', 'BTC-USD', 'BTC/USDT').
             start_date: Start date for data.
             end_date: End date for data (None for latest).
 
         Returns:
-            DataFrame with close prices (index=date, columns=['close']).
+            DataFrame with close prices (index=date, columns=[original_symbol]).
 
         Raises:
             ValueError: If no data is returned for the symbol.
             RuntimeError: If the Binance API request fails.
         """
-        pair = _symbol_to_binance_pair(symbol, self.quote_currency)
+        pair = self._normalize_symbol(symbol, self.quote_currency)
         timeframe = self.timeframe
 
         since_ms = int(datetime.combine(start_date, datetime.min.time()).replace(
@@ -131,6 +153,9 @@ class CcxtProvider(DataProvider):
 
         df = df[~df.index.duplicated(keep="first")]
         df = df.sort_index()
+
+        # Rename column to original user input so Parquet storage uses clean names
+        df.columns = [symbol]
 
         logger.info(
             "Fetched %d rows for %s from Binance (pair=%s, tf=%s)",
@@ -248,7 +273,7 @@ class CcxtProvider(DataProvider):
             True if symbol is valid on Binance, False otherwise.
         """
         try:
-            pair = _symbol_to_binance_pair(symbol, self.quote_currency)
+            pair = self._normalize_symbol(symbol, self.quote_currency)
             self._exchange.load_markets()
             return pair in self._exchange.markets
         except Exception:
@@ -276,7 +301,7 @@ class CcxtProvider(DataProvider):
             DataFrame with OHLCV columns (index=date).
         """
         tf = TIMEFRAME_MAP.get(timeframe, timeframe)
-        pair = _symbol_to_binance_pair(symbol, self.quote_currency)
+        pair = self._normalize_symbol(symbol, self.quote_currency)
 
         since_ms = None
         if start_date is not None:

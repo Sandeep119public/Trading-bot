@@ -76,7 +76,8 @@ def test_ccxt_pagination_fetches_all_candles():
     assert mock_exchange._call_count >= 3, (
         f"Expected >=3 API calls for pagination, got {mock_exchange._call_count}"
     )
-    assert "close" in df.columns
+    assert len(df.columns) == 1
+    assert df.columns[0] == "BTC"
     assert df.index.name == "date"
     assert df.index.is_monotonic_increasing
 
@@ -104,24 +105,26 @@ def test_ccxt_single_page_fetch():
 
 def test_ccxt_symbol_mapping():
     """Verify that various symbol formats are mapped to Binance pair format."""
-    from trendbot.infrastructure.data_providers.ccxt_provider import _symbol_to_binance_pair
+    from trendbot.infrastructure.data_providers.ccxt_provider import CcxtProvider
+
+    normalize = CcxtProvider._normalize_symbol
 
     # Plain base format
-    assert _symbol_to_binance_pair("BTC") == "BTC/USDT"
-    assert _symbol_to_binance_pair("eth") == "ETH/USDT"
+    assert normalize("BTC") == "BTC/USDT"
+    assert normalize("eth") == "ETH/USDT"
 
     # Yahoo Finance format
-    assert _symbol_to_binance_pair("BTC-USD") == "BTC/USDT"
-    assert _symbol_to_binance_pair("ETH-USD") == "ETH/USDT"
-    assert _symbol_to_binance_pair("SOL-USD") == "SOL/USDT"
+    assert normalize("BTC-USD") == "BTC/USDT"
+    assert normalize("ETH-USD") == "ETH/USDT"
+    assert normalize("SOL-USD") == "SOL/USDT"
 
     # Already in CCXT format
-    assert _symbol_to_binance_pair("BTC/USDC") == "BTC/USDC"
-    assert _symbol_to_binance_pair("SOL/USDC") == "SOL/USDC"
-    assert _symbol_to_binance_pair("btc/usdt") == "BTC/USDT"
+    assert normalize("BTC/USDC") == "BTC/USDC"
+    assert normalize("SOL/USDC") == "SOL/USDC"
+    assert normalize("btc/usdt") == "BTC/USDT"
 
     # Custom quote currency
-    assert _symbol_to_binance_pair("SOL", "USDC") == "SOL/USDC"
+    assert normalize("SOL", "USDC") == "SOL/USDC"
 
 
 def test_ccxt_empty_response_raises():

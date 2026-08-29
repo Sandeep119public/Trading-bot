@@ -14,6 +14,7 @@ import streamlit as st
 
 from trendbot.application.backtest_service import BacktestService
 from trendbot.application.data_service import DataService
+from trendbot.domain.models import load_paths_config
 from trendbot.infrastructure.data_providers.yfinance_provider import YFinanceProvider
 from trendbot.infrastructure.repositories.parquet_price_repository import (
     ParquetPriceRepository,
@@ -36,8 +37,13 @@ st.set_page_config(
 
 init_state()
 
-# Initialize infrastructure
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
+# Initialize infrastructure from paths config
+paths = load_paths_config()
+DATA_DIR = Path(paths["data_dir"])
+OUTPUT_DIR = Path(paths["output_dir"])
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 provider = YFinanceProvider()
 repository = ParquetPriceRepository(DATA_DIR)
 data_service = DataService(provider, repository)
@@ -68,7 +74,7 @@ with st.sidebar:
     ) or None
 
     st.divider()
-    st.caption(f"Output dir: {Path('output').absolute()}")
+    st.caption(f"Output dir: {OUTPUT_DIR.absolute()}")
 
     if st.button("Reset to Defaults", key="reset_btn"):
         reset_defaults()

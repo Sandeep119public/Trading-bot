@@ -70,10 +70,23 @@ def render_backtest_page(
         request = get_backtest_request(selected_symbols)
 
         with st.spinner("Running backtest..."):
-            dto = backtest_service.run(request)
+            try:
+                dto = backtest_service.run(request)
+            except ValueError as e:
+                st.error(f"Data integrity check failed:")
+                st.warning(str(e))
+                return
+            except Exception as e:
+                st.error(f"Backtest failed unexpectedly: {e}")
+                return
 
         if dto.error:
-            st.error(f"Backtest failed: {dto.error}")
+            # Check if it's a data integrity error (multi-line with dash bullets)
+            if "Data integrity check failed" in dto.error:
+                st.error("Data Integrity Check Failed")
+                st.warning(dto.error)
+            else:
+                st.error(f"Backtest failed: {dto.error}")
         else:
             st.session_state.backtest_result = dto.result
             st.success("Backtest completed!")

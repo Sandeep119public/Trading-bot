@@ -157,3 +157,24 @@ def load_defaults(config_path: Path | None = None) -> dict:
         config_path = Path(__file__).parent.parent.parent.parent / "config" / "defaults.yaml"
     with open(config_path) as f:
         return yaml.safe_load(f)
+
+
+def load_paths_config(config_path: Path | None = None) -> dict[str, str]:
+    """Load local path configuration from paths.yaml.
+
+    Args:
+        config_path: Optional path to paths.yaml. Defaults to config/paths.yaml.
+
+    Returns:
+        Dictionary with 'data_dir' and 'output_dir' keys.
+    """
+    if config_path is None:
+        config_path = Path(__file__).parent.parent.parent.parent / "config" / "paths.yaml"
+    if not config_path.exists():
+        return {"data_dir": "./data", "output_dir": "./output"}
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f) or {}
+    return {
+        "data_dir": cfg.get("data_dir", "./data"),
+        "output_dir": cfg.get("output_dir", "./output"),
+    }

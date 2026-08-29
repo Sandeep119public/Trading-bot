@@ -39,9 +39,14 @@ class BacktestService:
             return BacktestDTO(request=request, error=str(e))
 
     def _load_data(self, request: BacktestRequest) -> pd.DataFrame:
-        """Load price data for the backtest."""
+        """Load price data for the backtest.
+
+        Raises:
+            ValueError: If no data found, or if assets have missing/misaligned data.
+        """
         ds = request.data_selection
         frames: dict[str, pd.Series] = {}
+        missing_assets: list[str] = []
 
         for symbol in ds.symbols:
             try:
@@ -50,13 +55,68 @@ class BacktestService:
                 )
                 if not df.empty and "close" in df.columns:
                     frames[symbol] = df["close"]
+                else:
+                    missing_assets.append(symbol)
             except Exception as e:
                 logger.warning("Skipping %s: %s", symbol, e)
+                missing_assets.append(symbol)
 
         if not frames:
             raise ValueError("No valid price data found for the selected universe")
 
         close = pd.DataFrame(frames).dropna(how="all")
+
+        # Data integrity check: verify all assets have data for the full date range
+        issues: list[str] = []
+
+        if missing_assets:
+            issues.append(f"No data loaded for: {', '.join(missing_assets)}")
+
+        if ds.start_date is not None and len(close) > 0:
+            actual_start = close.index[0].date()
+            if actual_start > ds.start_date:
+                issues.append(
+                    f"Data starts at {actual_start}, but backtest starts at {ds.start_date}"
+                )
+
+        if ds.end_date is not None and len(close) > 0:
+            actual_end = close.index[-1].date()
+            if actual_end < ds.end_date:
+                issues.append(
+                    f"Data ends at {actual_end}, but backtest ends at {ds.end_date}"
+                )
+
+        # Check for assets with significant gaps (>20% missing bars)
+        if len(close) > 0:
+            expected_bars = len(close)
+            for col in close.columns:
+                coverage = close[col].notna().sum() / expected_bars
+                if coverage < 0.8:
+                    issues.append(
+                        f"Asset '{col}' has only {coverage:.0%} data coverage "
+                        f"({close[col].notna().sum()}/{expected_bars} bars)"
+                    )
+
+        # Check for misaligned dates across assets
+        if close.shape[1] > 1:
+            date_sets = {col: set(close[col].dropna().index) for col in close.columns}
+            reference = date_sets[list(date_sets.keys())[0]]
+            for col, dates in date_sets.items():
+                missing_dates = reference - dates
+                if len(missing_dates) > 0:
+                    sample = sorted(missing_dates)[:3]
+                    sample_str = ", ".join(str(d.date()) for d in sample)
+                    issues.append(
+                        f"Asset '{col}' missing {len(missing_dates)} dates "
+                        f"(e.g., {sample_str})"
+                    )
+
+        if issues:
+            raise ValueError(
+                "Data integrity check failed:\n"
+                + "\n".join(f"  - {issue}" for issue in issues)
+            )
+
         return close
 
     def _execute_backtest(

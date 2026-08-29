@@ -55,17 +55,20 @@ class DataService:
                     df = provider.fetch_daily_close_prices(
                         symbol, request.start_date, request.end_date
                     )
+                    # Sanitize symbol for Parquet storage (remove slashes)
+                    save_symbol = CcxtProvider._sanitize_for_path(symbol)
                 else:
                     df = self._provider.fetch_daily_close_prices(
                         symbol, request.start_date, request.end_date
                     )
+                    save_symbol = symbol
 
                 if df.empty:
                     logger.warning("Empty data for %s", symbol)
                     failed.append(f"{symbol}: empty data")
                     continue
 
-                self._repository.save_prices(request.source, symbol, timeframe, df)
+                self._repository.save_prices(request.source, save_symbol, timeframe, df)
                 processed.append(symbol)
                 logger.info("Downloaded %s: %d rows", symbol, len(df))
 
