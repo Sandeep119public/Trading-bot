@@ -1,19 +1,15 @@
 data:
-  source: binance
+  source: delta_india
   timeframe: 1d
-  quote_currency: USDT
-  start_date: "2018-01-01"
+  quote_currency: USD
+  start_date: "2020-01-01"
   end_date: null
   overwrite: false
 
 universe:
-  - BTC
-  - ETH
-  - SOL
-  - SPY
-  - QQQ
-  - GLD
-  - TLT
+  - BTCUSD
+  - ETHUSD
+  - SOLUSD
 
 strategy:
   lookbacks:
