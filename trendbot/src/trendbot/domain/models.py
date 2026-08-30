@@ -159,13 +159,13 @@ class DatasetMetadata(BaseModel):
 
 class BacktestResult(BaseModel):
     stats: dict[str, float]
-    returns: object  # pd.Series
-    gross_returns: object  # pd.Series
-    positions: object  # pd.DataFrame
-    executed_weights: object  # pd.DataFrame
-    turnover: object  # pd.Series
-    costs: object  # pd.Series
-    benchmark_returns: object | None  # pd.Series or None
+    returns: object
+    gross_returns: object
+    positions: object
+    executed_weights: object
+    turnover: object
+    costs: object
+    benchmark_returns: object | None
     metadata: dict[str, str]
 
 
@@ -178,14 +178,7 @@ def load_defaults(config_path: Path | None = None) -> dict:
 
 
 def load_paths_config(config_path: Path | None = None) -> dict[str, str]:
-    """Load local path configuration from paths.yaml.
-
-    Args:
-        config_path: Optional path to paths.yaml. Defaults to config/paths.yaml.
-
-    Returns:
-        Dictionary with 'data_dir' and 'output_dir' keys.
-    """
+    """Load local path configuration from paths.yaml."""
     if config_path is None:
         config_path = Path(__file__).parent.parent.parent.parent / "config" / "paths.yaml"
     if not config_path.exists():
@@ -206,38 +199,29 @@ def load_paths_config(config_path: Path | None = None) -> dict[str, str]:
 class WalkForwardConfig(BaseModel):
     """Configuration for walk-forward out-of-sample validation."""
 
-    train_window: int = Field(
-        default=756,
-        description="Training window length in bars.",
-    )
-    test_window: int = Field(
-        default=126,
-        description="Test window length in bars.",
-    )
-    step: int = Field(
-        default=126,
-        description="Step size in bars between consecutive folds.",
-    )
+    train_window: int = Field(default=756, description="Training window length in bars.")
+    test_window: int = Field(default=126, description="Test window length in bars.")
+    step: int = Field(default=126, description="Step size in bars between folds.")
     minimum_training_bars: int = Field(
         default=126,
         description="Minimum training bars required before a fold is valid.",
     )
-    allow_short: bool = Field(
-        default=True,
-        description="Whether to allow short positions.",
+    minimum_training_observations: int = Field(
+        default=126,
+        description="Minimum post-warmup return observations used for parameter selection.",
     )
-    ann_factor: int = Field(
-        default=365,
-        description="Annualization factor (252 or 365).",
+    minimum_training_trades: int = Field(
+        default=1,
+        description="Minimum number of executed trades required for a candidate to be eligible.",
     )
-    target_portfolio_vol: float = Field(
-        default=0.10,
-        description="Target portfolio volatility (used as-is, not optimized).",
+    sharpe_tie_tolerance: float = Field(
+        default=0.02,
+        description="Training Sharpe difference treated as statistically indistinguishable for tie-breaking.",
     )
-    max_gross_leverage: float = Field(
-        default=1.0,
-        description="Maximum gross leverage (used as-is, not optimized).",
-    )
+    allow_short: bool = Field(default=True, description="Whether to allow short positions.")
+    ann_factor: int = Field(default=365, description="Annualization factor (252 or 365).")
+    target_portfolio_vol: float = Field(default=0.10)
+    max_gross_leverage: float = Field(default=1.0)
     taker_fee_pct: float = Field(default=0.001)
     slippage_pct: float = Field(default=0.0005)
     min_history: int = Field(default=60)
@@ -249,25 +233,39 @@ class WalkForwardConfig(BaseModel):
             raise ValueError("ann_factor must be 252 or 365")
         return v
 
-    @field_validator("train_window")
+    @field_validator("train_window", "test_window", "step")
     @classmethod
-    def validate_train_window(cls, v: int) -> int:
+    def validate_positive_windows(cls, v: int) -> int:
         if v <= 0:
-            raise ValueError("train_window must be positive")
+            raise ValueError("WFO window and step values must be positive")
         return v
 
-    @field_validator("test_window")
+    @field_validator("minimum_training_bars", "minimum_training_observations")
     @classmethod
-    def validate_test_window(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("test_window must be positive")
+    def validate_non_negative_counts(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("training observation requirements must be non-negative")
         return v
 
-    @field_validator("step")
+    @field_validator("minimum_training_trades")
     @classmethod
-    def validate_step(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("step must be positive")
+    def validate_training_trades(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("minimum_training_trades must be non-negative")
+        return v
+
+    @field_validator("sharpe_tie_tolerance")
+    @classmethod
+    def validate_sharpe_tolerance(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("sharpe_tie_tolerance must be non-negative")
+        return v
+
+    @field_validator("min_history")
+    @classmethod
+    def validate_min_history(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("min_history must be non-negative")
         return v
 
 
@@ -275,29 +273,12 @@ class ParameterGrid(BaseModel):
     """Explicit parameter search grid for WFO optimization."""
 
     lookbacks: list[list[int]] = Field(
-        default=[
-            [5, 10, 21, 42],
-            [10, 21, 42, 84],
-            [21, 42, 84, 126],
-        ],
-        description="List of lookback configurations to search.",
+        default=[[5, 10, 21, 42], [10, 21, 42, 84], [21, 42, 84, 126]],
     )
-    vol_window: list[int] = Field(
-        default=[20, 40, 60],
-        description="Volatility window candidates.",
-    )
-    covariance_window: list[int] = Field(
-        default=[40, 60, 120],
-        description="Covariance estimation window candidates.",
-    )
-    covariance_shrinkage: list[float] = Field(
-        default=[0.0, 0.1, 0.25, 0.5],
-        description="Covariance shrinkage candidates.",
-    )
-    rebalance_threshold: list[float] = Field(
-        default=[0.0, 0.005, 0.01],
-        description="Rebalance threshold candidates.",
-    )
+    vol_window: list[int] = Field(default=[20, 40, 60])
+    covariance_window: list[int] = Field(default=[40, 60, 120])
+    covariance_shrinkage: list[float] = Field(default=[0.0, 0.1, 0.25, 0.5])
+    rebalance_threshold: list[float] = Field(default=[0.0, 0.005, 0.01])
 
 
 @dataclass(frozen=True)
