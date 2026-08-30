@@ -29,23 +29,16 @@ from trendbot.domain.models import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Fold generation
-# ---------------------------------------------------------------------------
-
-
 def generate_folds(n_bars: int, config: WalkForwardConfig) -> list[WalkForwardFold]:
     """Generate fixed-length, non-overlapping train/test folds."""
     folds: list[WalkForwardFold] = []
     fold_index = 0
     start = 0
-
     while start + config.train_window + config.test_window <= n_bars:
         train_start = start
         train_end = start + config.train_window
         test_start = train_end
         test_end = test_start + config.test_window
-
         if train_end - train_start >= config.minimum_training_bars:
             folds.append(
                 WalkForwardFold(
@@ -57,15 +50,12 @@ def generate_folds(n_bars: int, config: WalkForwardConfig) -> list[WalkForwardFo
                 )
             )
             fold_index += 1
-
         start += config.step
-
     if not folds:
         raise ValueError(
             f"Dataset has {n_bars} bars which is too short for "
             f"train_window={config.train_window}, test_window={config.test_window}."
         )
-
     return folds
 
 
@@ -82,7 +72,7 @@ def validate_no_overlapping_oos(folds: list[WalkForwardFold]) -> None:
 
 
 def _validate_close(close: pd.DataFrame) -> None:
-    """Validate the input data before any optimization is attempted."""
+    """Validate input data before optimization."""
     if close.empty:
         raise ValueError("WFO requires a non-empty close-price DataFrame")
     if not close.index.is_monotonic_increasing:
@@ -93,28 +83,15 @@ def _validate_close(close: pd.DataFrame) -> None:
         raise ValueError("WFO requires at least one asset column")
 
 
-# ---------------------------------------------------------------------------
-# Parameter enumeration
-# ---------------------------------------------------------------------------
-
-
-def enumerate_parameter_combinations(
-    grid: ParameterGrid,
-) -> list[dict[str, object]]:
-    """Enumerate the complete explicit parameter grid deterministically."""
+def enumerate_parameter_combinations(grid: ParameterGrid) -> list[dict[str, object]]:
+    """Enumerate the explicit parameter grid deterministically."""
     keys = (
-        "lookbacks",
-        "vol_window",
-        "covariance_window",
-        "covariance_shrinkage",
-        "rebalance_threshold",
+        "lookbacks", "vol_window", "covariance_window",
+        "covariance_shrinkage", "rebalance_threshold",
     )
     values = (
-        grid.lookbacks,
-        grid.vol_window,
-        grid.covariance_window,
-        grid.covariance_shrinkage,
-        grid.rebalance_threshold,
+        grid.lookbacks, grid.vol_window, grid.covariance_window,
+        grid.covariance_shrinkage, grid.rebalance_threshold,
     )
     return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
 
@@ -136,15 +113,8 @@ def _active_slice(
     config: WalkForwardConfig,
 ) -> slice:
     """Return the first bar that can contain a realized strategy return."""
-    # run_backtest creates the position at t and realizes its first market P&L
-    # at t+1. Therefore the first non-warmup return is required_history + 1.
-    start = _required_history(params, config) + 1
-    return slice(start, None)
-
-
-# ---------------------------------------------------------------------------
-# Training evaluation
-# ---------------------------------------------------------------------------
+    del result
+    return slice(_required_history(params, config) + 1, None)
 
 
 def _run_backtest_safely(
@@ -169,17 +139,13 @@ def _run_backtest_safely(
             covariance_window=int(params["covariance_window"]),
             covariance_shrinkage=float(params["covariance_shrinkage"]),
         )
-    except (ValueError, FloatingPointError, np.linalg.LinAlgError) as exc:
+    except Exception as exc:
         logger.warning("Candidate rejected for params %s: %s", params, exc)
         return None
 
 
 def _held_positions(positions: pd.DataFrame) -> pd.DataFrame:
-    """Align exposure with the return it actually earns.
-
-    The production engine executes at t and uses position[t-1] for the market
-    return observed at t. Metrics therefore must use the lagged position too.
-    """
+    """Align exposure with the return it actually earns."""
     return positions.shift(1).fillna(0.0)
 
 
@@ -188,14 +154,13 @@ def _training_metrics(
     params: dict[str, object],
     config: WalkForwardConfig,
 ) -> dict[str, float]:
-    """Compute training metrics using the same causal timing as live P&L."""
+    """Compute training metrics using causal return/exposure alignment."""
     active = _active_slice(result, params, config)
     returns = cast(pd.Series, result["returns"]).iloc[active]
     gross_returns = cast(pd.Series, result["gross_returns"]).iloc[active]
     turnover = cast(pd.Series, result["turnover"]).iloc[active]
     costs = cast(pd.Series, result["costs"]).iloc[active]
     positions = _held_positions(cast(pd.DataFrame, result["positions"])).iloc[active]
-
     return compute_metrics(
         returns=returns,
         positions=positions,
@@ -212,19 +177,16 @@ def _candidate_is_eligible(
     params: dict[str, object],
     config: WalkForwardConfig,
 ) -> bool:
-    """Apply minimum-observation and minimum-trade guards before optimization."""
+    """Require enough realized observations and actual trades."""
     active = _active_slice(result, params, config)
     returns = cast(pd.Series, result["returns"]).iloc[active]
     turnover = cast(pd.Series, result["turnover"]).iloc[active]
-
     observations = int(returns.notna().sum())
     trades = int((turnover > 0.0).sum())
-
-    if observations < config.minimum_training_observations:
-        return False
-    if trades < config.minimum_training_trades:
-        return False
-    return True
+    return (
+        observations >= config.minimum_training_observations
+        and trades >= config.minimum_training_trades
+    )
 
 
 def _compute_training_sharpe(
@@ -232,7 +194,7 @@ def _compute_training_sharpe(
     ann_factor: int,
     min_history: int,
 ) -> float | None:
-    """Backward-compatible helper for callers/tests of the original API."""
+    """Backward-compatible helper retained for existing callers/tests."""
     metrics = compute_metrics(
         returns=cast(pd.Series, result["returns"]),
         positions=_held_positions(cast(pd.DataFrame, result["positions"])),
@@ -251,28 +213,16 @@ def _tie_break(
     candidates: list[tuple[float, dict[str, object], dict[str, float]]],
     sharpe_tolerance: float = 0.02,
 ) -> dict[str, object]:
-    """Choose a robust candidate instead of chasing a tiny Sharpe maximum.
-
-    Candidates within ``sharpe_tolerance`` of the best Sharpe are treated as
-    practically indistinguishable. Among those candidates we prefer lower
-    drawdown, lower turnover, and simpler execution parameters.
-    """
+    """Prefer robust candidates when Sharpe differences are practically tiny."""
     if not candidates:
         raise ValueError("Cannot tie-break an empty candidate set")
-
     candidates = sorted(candidates, key=lambda x: x[0], reverse=True)
     best_sharpe = candidates[0][0]
     tied = [c for c in candidates if best_sharpe - c[0] <= sharpe_tolerance]
-
     best_dd = max(c[2]["max_drawdown"] for c in tied)
     tied = [c for c in tied if best_dd - c[2]["max_drawdown"] <= 1e-4]
-
     best_turnover = min(c[2]["avg_daily_turnover"] for c in tied)
-    tied = [
-        c for c in tied
-        if c[2]["avg_daily_turnover"] - best_turnover <= 1e-6
-    ]
-
+    tied = [c for c in tied if c[2]["avg_daily_turnover"] - best_turnover <= 1e-6]
     tied.sort(
         key=lambda c: (
             float(c[1]["rebalance_threshold"]),
@@ -296,37 +246,26 @@ def select_parameters(
             f"Training data has {len(train_close)} bars, below "
             f"minimum_training_bars={config.minimum_training_bars}."
         )
-
     results: list[tuple[float, dict[str, object], dict[str, float]]] = []
     for params in enumerate_parameter_combinations(grid):
-        required = _required_history(params, config)
-        if required + 1 >= len(train_close):
+        if _required_history(params, config) + 1 >= len(train_close):
             continue
-
         bt = _run_backtest_safely(train_close, params, config)
         if bt is None or not _candidate_is_eligible(bt, params, config):
             continue
-
         metrics = _training_metrics(bt, params, config)
         sharpe = metrics["sharpe_ratio"]
         if not pd.notna(sharpe):
             continue
         results.append((float(sharpe), params, metrics))
-
     if not results:
         raise ValueError(
             "No parameter combination produced valid training results. "
             "Increase training data or relax minimum observation/trade constraints."
         )
-
     best_params = _tie_break(results, config.sharpe_tie_tolerance)
     winner = next(r for r in results if r[1] == best_params)
     return best_params, winner[0], winner[2]
-
-
-# ---------------------------------------------------------------------------
-# OOS execution
-# ---------------------------------------------------------------------------
 
 
 def run_oos_fold(
@@ -335,19 +274,13 @@ def run_oos_fold(
     selected_params: dict[str, object],
     config: WalkForwardConfig,
 ) -> FoldResult:
-    """Run frozen parameters over train context + OOS period.
-
-    ``full_close`` must contain exactly the bars from ``fold.train_start_idx``
-    through ``fold.test_end_idx``. Only the test interval contributes to OOS
-    scoring. The train portion exists solely to warm up causal state.
-    """
+    """Run frozen parameters over train context plus OOS period."""
     expected_len = fold.test_end_idx - fold.train_start_idx
     if len(full_close) != expected_len:
         raise ValueError(
             "run_oos_fold requires full_close to span exactly "
             "train_start_idx:test_end_idx"
         )
-
     bt = run_backtest(
         close=full_close,
         lookbacks=cast(list[int], selected_params["lookbacks"]),
@@ -378,13 +311,11 @@ def run_oos_fold(
     oos_gross_returns = all_gross.iloc[relative_test_start:relative_test_end].copy()
     oos_turnover = all_turnover.iloc[relative_test_start:relative_test_end].copy()
     oos_costs = all_costs.iloc[relative_test_start:relative_test_end].copy()
-
-    # Positions are shifted because return[t] is earned by position[t-1].
     oos_positions = _held_positions(all_positions).iloc[
         relative_test_start:relative_test_end
     ].copy()
-
     oos_equity = (1.0 + oos_returns).cumprod()
+
     oos_metrics = compute_metrics(
         returns=oos_returns,
         positions=oos_positions,
@@ -425,23 +356,16 @@ def run_oos_fold(
     )
 
 
-# ---------------------------------------------------------------------------
-# Stitching and reporting
-# ---------------------------------------------------------------------------
-
-
 def stitch_oos_returns(fold_results: list[FoldResult]) -> tuple[pd.Series, pd.Series]:
     """Concatenate OOS returns and reject duplicate timestamps."""
     if not fold_results:
         return pd.Series(dtype=float), pd.Series(dtype=float)
-
     stitched = pd.concat([fr.oos_returns for fr in fold_results])
     if stitched.index.has_duplicates:
         raise ValueError("Stitched OOS returns contain duplicate timestamps")
     if not stitched.index.is_monotonic_increasing:
         stitched = stitched.sort_index()
-    stitched_equity = (1.0 + stitched).cumprod()
-    return stitched, stitched_equity
+    return stitched, (1.0 + stitched).cumprod()
 
 
 def compute_parameter_stability(
@@ -450,7 +374,6 @@ def compute_parameter_stability(
     """Count parameter selections across folds."""
     if not fold_results:
         return {}
-
     stability: dict[str, dict[object, int]] = {}
     for key in fold_results[0].selected_parameters:
         counter: Counter[object] = Counter()
@@ -461,28 +384,19 @@ def compute_parameter_stability(
     return stability
 
 
-def _aggregate_metrics(fold_results: list[FoldResult], config: WalkForwardConfig) -> dict[str, float]:
-    """Compute metrics from the stitched OOS series, never from fold averages."""
-    stitched_returns = pd.concat([fr.oos_returns for fr in fold_results])
-    stitched_positions = pd.concat([fr.oos_positions for fr in fold_results])
-    stitched_turnover = pd.concat([fr.oos_turnover for fr in fold_results])
-    stitched_costs = pd.concat([fr.oos_costs for fr in fold_results])
-    stitched_gross = pd.concat([fr.oos_gross_returns for fr in fold_results])
-
+def _aggregate_metrics(
+    fold_results: list[FoldResult], config: WalkForwardConfig
+) -> dict[str, float]:
+    """Compute metrics from the stitched OOS series, never fold averages."""
     return compute_metrics(
-        returns=stitched_returns,
-        positions=stitched_positions,
-        turnover=stitched_turnover,
-        costs=stitched_costs,
+        returns=pd.concat([fr.oos_returns for fr in fold_results]),
+        positions=pd.concat([fr.oos_positions for fr in fold_results]),
+        turnover=pd.concat([fr.oos_turnover for fr in fold_results]),
+        costs=pd.concat([fr.oos_costs for fr in fold_results]),
         ann_factor=config.ann_factor,
-        gross_returns=stitched_gross,
+        gross_returns=pd.concat([fr.oos_gross_returns for fr in fold_results]),
         min_history=0,
     )
-
-
-# ---------------------------------------------------------------------------
-# Full WFO runner
-# ---------------------------------------------------------------------------
 
 
 def run_walk_forward(
@@ -494,37 +408,25 @@ def run_walk_forward(
     _validate_close(close)
     folds = generate_folds(len(close), config)
     validate_no_overlapping_oos(folds)
-
-    logger.info(
-        "WFO: %d folds, train=%d, test=%d, step=%d, total_bars=%d",
-        len(folds), config.train_window, config.test_window, config.step, len(close),
-    )
-
     fold_results: list[FoldResult] = []
+
     for fold in folds:
         train_close = close.iloc[fold.train_start_idx:fold.train_end_idx]
         selected_params, train_sharpe, _ = select_parameters(
             train_close, grid, config
         )
-
         logger.info(
             "Fold %d: selected=%s train_sharpe=%.4f",
             fold.fold_index,
             selected_params,
             train_sharpe,
         )
-
-        # The OOS engine receives historical context, but the scoring slice is
-        # strictly [test_start_idx, test_end_idx). Parameters are already frozen.
         full_close = close.iloc[fold.train_start_idx:fold.test_end_idx]
-        fold_results.append(
-            run_oos_fold(full_close, fold, selected_params, config)
-        )
+        fold_results.append(run_oos_fold(full_close, fold, selected_params, config))
 
     stitched_returns, stitched_equity = stitch_oos_returns(fold_results)
     aggregate_metrics = _aggregate_metrics(fold_results, config)
     stability = compute_parameter_stability(fold_results)
-
     per_fold_summary: list[dict[str, object]] = []
     for fr in fold_results:
         per_fold_summary.append(
@@ -542,7 +444,6 @@ def run_walk_forward(
                 "oos_cost_drag": fr.oos_metrics["total_cost_drag"],
             }
         )
-
     return WalkForwardReport(
         folds=fold_results,
         stitched_oos_returns=stitched_returns,
