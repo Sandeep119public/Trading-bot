@@ -4,11 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trendbot.domain.covariance import estimate_covariance
-from trendbot.domain.risk import calculate_portfolio_volatility, calculate_volatility_scalar
 from trendbot.domain.constraints import apply_constraints
+from trendbot.domain.covariance import estimate_covariance
 from trendbot.domain.portfolio import construct_target_portfolio
-
+from trendbot.domain.risk import calculate_portfolio_volatility, calculate_volatility_scalar
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -37,6 +36,7 @@ def mock_inputs(mock_returns):
         "max_gross_leverage": 2.0,
         "max_asset_weight": 0.5,
         "cov_shrinkage": 0.1,
+        "ann_factor": 365,
     }
 
 
@@ -164,7 +164,11 @@ def test_portfolio_orchestration_sequence(mock_inputs):
     assert final_weights["C"] >= 0
 
     # 3. Independent manual calculation
-    cov = estimate_covariance(mock_inputs["returns_history"], shrinkage=0.1)
+    cov = estimate_covariance(
+        mock_inputs["returns_history"],
+        shrinkage=0.1,
+        ann_factor=mock_inputs["ann_factor"],
+    )
     inv_vols = 1.0 / mock_inputs["asset_vols"]
     base = inv_vols / inv_vols.sum()
     raw = base * mock_inputs["signals"]

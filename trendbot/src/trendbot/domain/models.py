@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
 
+import pandas as pd
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
@@ -194,3 +196,153 @@ def load_paths_config(config_path: Path | None = None) -> dict[str, str]:
         "data_dir": cfg.get("data_dir", "./data"),
         "output_dir": cfg.get("output_dir", "./output"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Walk-Forward Optimization models
+# ---------------------------------------------------------------------------
+
+
+class WalkForwardConfig(BaseModel):
+    """Configuration for walk-forward out-of-sample validation."""
+
+    train_window: int = Field(
+        default=756,
+        description="Training window length in bars.",
+    )
+    test_window: int = Field(
+        default=126,
+        description="Test window length in bars.",
+    )
+    step: int = Field(
+        default=126,
+        description="Step size in bars between consecutive folds.",
+    )
+    minimum_training_bars: int = Field(
+        default=126,
+        description="Minimum training bars required before a fold is valid.",
+    )
+    allow_short: bool = Field(
+        default=True,
+        description="Whether to allow short positions.",
+    )
+    ann_factor: int = Field(
+        default=365,
+        description="Annualization factor (252 or 365).",
+    )
+    target_portfolio_vol: float = Field(
+        default=0.10,
+        description="Target portfolio volatility (used as-is, not optimized).",
+    )
+    max_gross_leverage: float = Field(
+        default=1.0,
+        description="Maximum gross leverage (used as-is, not optimized).",
+    )
+    taker_fee_pct: float = Field(default=0.001)
+    slippage_pct: float = Field(default=0.0005)
+    min_history: int = Field(default=60)
+
+    @field_validator("ann_factor")
+    @classmethod
+    def validate_ann_factor(cls, v: int) -> int:
+        if v not in (252, 365):
+            raise ValueError("ann_factor must be 252 or 365")
+        return v
+
+    @field_validator("train_window")
+    @classmethod
+    def validate_train_window(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("train_window must be positive")
+        return v
+
+    @field_validator("test_window")
+    @classmethod
+    def validate_test_window(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("test_window must be positive")
+        return v
+
+    @field_validator("step")
+    @classmethod
+    def validate_step(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("step must be positive")
+        return v
+
+
+class ParameterGrid(BaseModel):
+    """Explicit parameter search grid for WFO optimization."""
+
+    lookbacks: list[list[int]] = Field(
+        default=[
+            [5, 10, 21, 42],
+            [10, 21, 42, 84],
+            [21, 42, 84, 126],
+        ],
+        description="List of lookback configurations to search.",
+    )
+    vol_window: list[int] = Field(
+        default=[20, 40, 60],
+        description="Volatility window candidates.",
+    )
+    covariance_window: list[int] = Field(
+        default=[40, 60, 120],
+        description="Covariance estimation window candidates.",
+    )
+    covariance_shrinkage: list[float] = Field(
+        default=[0.0, 0.1, 0.25, 0.5],
+        description="Covariance shrinkage candidates.",
+    )
+    rebalance_threshold: list[float] = Field(
+        default=[0.0, 0.005, 0.01],
+        description="Rebalance threshold candidates.",
+    )
+
+
+@dataclass(frozen=True)
+class WalkForwardFold:
+    """Immutable definition of a single walk-forward fold."""
+
+    fold_index: int
+    train_start_idx: int
+    train_end_idx: int
+    test_start_idx: int
+    test_end_idx: int
+
+    @property
+    def train_length(self) -> int:
+        return self.train_end_idx - self.train_start_idx
+
+    @property
+    def test_length(self) -> int:
+        return self.test_end_idx - self.test_start_idx
+
+
+@dataclass(frozen=True)
+class FoldResult:
+    """Immutable result of a single walk-forward fold."""
+
+    fold: WalkForwardFold
+    selected_parameters: dict[str, object]
+    oos_returns: pd.Series
+    oos_equity: pd.Series
+    oos_gross_returns: pd.Series
+    oos_turnover: pd.Series
+    oos_costs: pd.Series
+    oos_positions: pd.DataFrame
+    training_sharpe: float
+    training_metrics: dict[str, float]
+    oos_metrics: dict[str, float]
+
+
+@dataclass
+class WalkForwardReport:
+    """Aggregated walk-forward validation report."""
+
+    folds: list[FoldResult]
+    stitched_oos_returns: pd.Series
+    stitched_oos_equity: pd.Series
+    aggregate_metrics: dict[str, float]
+    parameter_stability: dict[str, dict[object, int]]
+    per_fold_summary: list[dict[str, object]]

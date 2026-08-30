@@ -22,6 +22,13 @@ def calculate_portfolio_volatility(weights: pd.Series, cov_matrix: pd.DataFrame)
     aligned_weights = weights.reindex(cov_matrix.index).fillna(0.0).values
     cov_values = cov_matrix.values
 
+    # Verify alignment: weights and covariance must represent the same assets
+    # in the same order (after reindex).  This is a hard assertion to catch
+    # silent ordering bugs.
+    assert cov_matrix.index.equals(cov_matrix.columns), (
+        "Covariance matrix index and columns must match"
+    )
+
     variance = float(np.dot(aligned_weights.T, np.dot(cov_values, aligned_weights)))
 
     # Floating point safeguard
