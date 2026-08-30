@@ -138,6 +138,8 @@ class BacktestService:
             slippage_pct=exec_.slippage_pct,
             rebalance_threshold=exec_.rebalance_threshold,
             min_history=bt.min_history,
+            covariance_window=bt.covariance_window,
+            covariance_shrinkage=bt.covariance_shrinkage,
         )
 
         bench_returns = compute_benchmark_returns(close, bt.benchmark.value, bt.min_history)

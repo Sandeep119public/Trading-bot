@@ -109,12 +109,28 @@ class ExecutionParams(BaseModel):
 class BacktestParams(BaseModel):
     min_history: int = 60
     benchmark: BenchmarkType = BenchmarkType.EQUAL_WEIGHT
+    covariance_window: int = 60
+    covariance_shrinkage: float = 0.1
 
     @field_validator("min_history")
     @classmethod
     def validate_min_history(cls, v: int) -> int:
         if v < 0:
             raise ValueError("min_history must be non-negative")
+        return v
+
+    @field_validator("covariance_window")
+    @classmethod
+    def validate_covariance_window(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("covariance_window must be positive")
+        return v
+
+    @field_validator("covariance_shrinkage")
+    @classmethod
+    def validate_covariance_shrinkage(cls, v: float) -> float:
+        if v < 0 or v > 1.0:
+            raise ValueError("covariance_shrinkage must be in [0, 1.0]")
         return v
 
 

@@ -39,6 +39,7 @@ def test_strict_fee_deduction():
         slippage_pct=slippage_pct,
         rebalance_threshold=0.0,
         min_history=0,
+        covariance_window=3,
     )
 
     returns = result["returns"]
@@ -74,6 +75,7 @@ def test_zero_turnover_zero_cost():
         slippage_pct=0.0005,
         rebalance_threshold=1.0,
         min_history=0,
+        covariance_window=3,
     )
 
     turnover = result["turnover"]
@@ -97,6 +99,7 @@ def test_higher_fees_higher_cost():
         ann_factor=365, target_portfolio_vol=0.10, max_gross_leverage=1.0,
         taker_fee_pct=0.001, slippage_pct=0.0005,
         rebalance_threshold=0.01, min_history=0,
+        covariance_window=10,
     )
 
     high = run_backtest(
@@ -104,6 +107,7 @@ def test_higher_fees_higher_cost():
         ann_factor=365, target_portfolio_vol=0.10, max_gross_leverage=1.0,
         taker_fee_pct=0.005, slippage_pct=0.002,
         rebalance_threshold=0.01, min_history=0,
+        covariance_window=10,
     )
 
     assert high["costs"].sum() > base["costs"].sum()
