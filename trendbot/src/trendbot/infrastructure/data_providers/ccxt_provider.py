@@ -24,8 +24,7 @@ TIMEFRAME_MAP = {
 class CcxtProvider(DataProvider):
     """Data provider using CCXT for Binance exchange data.
 
-    Supports paginated OHLCV fetching to handle Binance API limits
-    (max 1000-1500 candles per request).
+    Supports paginated OHLCV fetching to handle Binance API limits.
     """
 
     def __init__(
@@ -34,13 +33,7 @@ class CcxtProvider(DataProvider):
         timeframe: str = "1d",
         rate_limit: bool = True,
     ) -> None:
-        """Initialize the CCXT provider.
-
-        Args:
-            quote_currency: Quote currency for pair construction (default USDT).
-            timeframe: Default OHLCV timeframe (default 1d).
-            rate_limit: Whether to enable CCXT rate limiting (recommended).
-        """
+        """Initialize the CCXT provider."""
         self.quote_currency = quote_currency
         self.timeframe = timeframe
 
@@ -60,21 +53,9 @@ class CcxtProvider(DataProvider):
 
     @staticmethod
     def _normalize_symbol(symbol: str, quote_currency: str = "USDT") -> str:
-        """Convert user inputs into valid CCXT/Binance symbols.
-
-        Handles Yahoo Finance format (BTC-USD), bare tickers (BTC),
-        and already-correct CCXT format (BTC/USDT).
-
-        Args:
-            symbol: User-provided ticker symbol.
-            quote_currency: Quote currency for bare tickers (default USDT).
-
-        Returns:
-            Normalized CCXT pair string (e.g., 'BTC/USDT').
-        """
+        """Convert user inputs into valid CCXT/Binance symbols."""
         symbol = symbol.upper().strip()
 
-        # 1. Handle Yahoo Finance format (e.g., BTC-USD -> BTC/USDT)
         if "-" in symbol:
             parts = symbol.split("-")
             base = parts[0]
@@ -83,26 +64,14 @@ class CcxtProvider(DataProvider):
                 quote = "USDT"
             return f"{base}/{quote}"
 
-        # 2. Handle plain base format (e.g., BTC -> BTC/USDT)
         if "/" not in symbol:
             return f"{symbol}/{quote_currency.upper()}"
 
-        # 3. Already in CCXT format (e.g., BTC/USDT)
         return symbol
 
     @staticmethod
     def _sanitize_for_path(symbol: str) -> str:
-        """Sanitize a symbol for use in file system paths.
-
-        Replaces slashes with dashes to prevent directory traversal issues
-        when saving to Parquet files.
-
-        Args:
-            symbol: Symbol to sanitize (e.g., 'BTC/USDT').
-
-        Returns:
-            Path-safe symbol (e.g., 'BTC-USDT').
-        """
+        """Sanitize a symbol for use in file system paths."""
         return symbol.replace("/", "-")
 
     def fetch_daily_close_prices(
@@ -111,50 +80,44 @@ class CcxtProvider(DataProvider):
         start_date: date,
         end_date: date | None,
     ) -> pd.DataFrame:
-        """Fetch daily close prices from Binance with automatic pagination.
-
-        Args:
-            symbol: Ticker symbol (e.g., 'BTC', 'BTC-USD', 'BTC/USDT').
-            start_date: Start date for data.
-            end_date: End date for data (None for latest).
-
-        Returns:
-            DataFrame with close prices (index=date, columns=[original_symbol]).
-
-        Raises:
-            ValueError: If no data is returned for the symbol.
-            RuntimeError: If the Binance API request fails.
-        """
+        """Fetch OHLCV closes from Binance with automatic pagination."""
         pair = self._normalize_symbol(symbol, self.quote_currency)
         timeframe = self.timeframe
 
-        since_ms = int(datetime.combine(start_date, datetime.min.time()).replace(
-            tzinfo=timezone.utc
-        ).timestamp() * 1000)
+        since_ms = int(
+            datetime.combine(start_date, datetime.min.time())
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+            * 1000
+        )
 
         end_ms = None
         if end_date is not None:
-            end_ms = int(datetime.combine(end_date, datetime.max.time()).replace(
-                tzinfo=timezone.utc
-            ).timestamp() * 1000)
+            end_ms = int(
+                datetime.combine(end_date, datetime.max.time())
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+                * 1000
+            )
 
         all_ohlcv = self._fetch_paginated(pair, timeframe, since_ms, end_ms)
 
         if not all_ohlcv:
             raise ValueError(f"No data returned for symbol '{symbol}' on Binance")
 
-        df = pd.DataFrame(all_ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["date"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).dt.tz_localize(None)
-        df = df.set_index("date")
-        df = df[["close"]]
+        df = pd.DataFrame(
+            all_ohlcv,
+            columns=["timestamp", "open", "high", "low", "close", "volume"],
+        )
+        df["date"] = pd.to_datetime(
+            df["timestamp"], unit="ms", utc=True
+        ).dt.tz_localize(None)
+        df = df.set_index("date")[["close"]]
 
         if end_ms is not None:
             df = df[df.index <= pd.Timestamp(end_date)]
 
-        df = df[~df.index.duplicated(keep="first")]
-        df = df.sort_index()
-
-        # Rename column to original user input so Parquet storage uses clean names
+        df = df[~df.index.duplicated(keep="first")].sort_index()
         df.columns = [symbol]
 
         logger.info(
@@ -170,19 +133,12 @@ class CcxtProvider(DataProvider):
         since_ms: int,
         end_ms: int | None,
     ) -> list[list]:
-        """Fetch OHLCV data with pagination to handle API limits.
+        """Fetch OHLCV pages using CCXT's standard since/limit arguments.
 
-        Loops through requests using the `since` parameter until all
-        candles are fetched or the end timestamp is reached.
-
-        Args:
-            pair: Trading pair (e.g., 'BTC/USDT').
-            timeframe: OHLCV timeframe.
-            since_ms: Start timestamp in milliseconds.
-            end_ms: End timestamp in milliseconds (None for latest).
-
-        Returns:
-            List of OHLCV candles [timestamp, open, high, low, close, volume].
+        ``since`` and ``limit`` are passed as CCXT function arguments. Binance
+        accepts the optional range terminator as ``endTime``. Do not duplicate
+        ``since`` or ``limit`` inside ``params`` because CCXT would send them
+        twice to Binance and Binance rejects the request with error -1104.
         """
         all_candles: list[list] = []
         current_since = since_ms
@@ -190,17 +146,21 @@ class CcxtProvider(DataProvider):
 
         while True:
             limit = BINANCE_MAX_CANDLES
-            params = {"since": current_since, "limit": limit}
-            if end_ms is not None:
-                params["until"] = end_ms
+            params = {"endTime": end_ms} if end_ms is not None else {}
 
-            candles = self._fetch_with_retry(pair, timeframe, params, max_retries)
+            candles = self._fetch_with_retry(
+                pair,
+                timeframe,
+                current_since,
+                limit,
+                params,
+                max_retries,
+            )
 
             if not candles:
                 break
 
             all_candles.extend(candles)
-
             last_timestamp = candles[-1][0]
 
             if end_ms is not None and last_timestamp >= end_ms:
@@ -209,7 +169,13 @@ class CcxtProvider(DataProvider):
             if len(candles) < limit:
                 break
 
-            current_since = last_timestamp + 1
+            next_since = last_timestamp + 1
+            if next_since <= current_since:
+                raise RuntimeError(
+                    f"Binance pagination stalled for {pair}: "
+                    f"current_since={current_since}, last_timestamp={last_timestamp}"
+                )
+            current_since = next_since
 
         return all_candles
 
@@ -217,22 +183,16 @@ class CcxtProvider(DataProvider):
         self,
         pair: str,
         timeframe: str,
+        since_ms: int,
+        limit: int,
         params: dict,
         max_retries: int,
     ) -> list[list]:
-        """Fetch OHLCV with retry logic for transient failures.
+        """Fetch one OHLCV page with retry logic.
 
-        Args:
-            pair: Trading pair.
-            timeframe: OHLCV timeframe.
-            params: Fetch parameters (since, limit, until).
-            max_retries: Maximum number of retry attempts.
-
-        Returns:
-            List of OHLCV candles.
-
-        Raises:
-            RuntimeError: If all retries fail.
+        ``since_ms`` and ``limit`` are deliberately passed only through the
+        named CCXT arguments. ``params`` contains only exchange-specific
+        parameters such as Binance's ``endTime``.
         """
         last_error = None
         for attempt in range(max_retries):
@@ -240,13 +200,9 @@ class CcxtProvider(DataProvider):
                 candles = self._exchange.fetch_ohlcv(
                     symbol=pair,
                     timeframe=timeframe,
-                    since=params.get("since"),
-                    limit=params.get("limit", BINANCE_MAX_CANDLES),
-                    params={
-                        k: v
-                        for k, v in params.items()
-                        if k in ("since", "limit", "until")
-                    },
+                    since=since_ms,
+                    limit=limit,
+                    params=params,
                 )
                 return candles
             except Exception as e:
@@ -257,80 +213,17 @@ class CcxtProvider(DataProvider):
                 )
                 if attempt < max_retries - 1:
                     import time
-                    time.sleep(min(2 ** attempt, 10))
+                    time.sleep(min(2**attempt, 10))
 
         raise RuntimeError(
             f"Failed to fetch {pair} after {max_retries} retries: {last_error}"
         )
 
     def validate_symbol(self, symbol: str) -> bool:
-        """Validate that a symbol exists on Binance.
-
-        Args:
-            symbol: Symbol to validate (e.g., 'BTC' or 'BTC/USDT').
-
-        Returns:
-            True if symbol is valid on Binance, False otherwise.
-        """
+        """Validate that a symbol exists on Binance."""
         try:
             pair = self._normalize_symbol(symbol, self.quote_currency)
             self._exchange.load_markets()
             return pair in self._exchange.markets
         except Exception:
             return False
-
-    def fetch_ohlcv(
-        self,
-        symbol: str,
-        timeframe: str = "1d",
-        start_date: date | None = None,
-        end_date: date | None = None,
-    ) -> pd.DataFrame:
-        """Fetch OHLCV data with configurable timeframe.
-
-        This is a convenience method that allows fetching data with
-        any supported timeframe, not just daily close prices.
-
-        Args:
-            symbol: Ticker symbol (e.g., 'BTC', 'BTC/USDT').
-            timeframe: OHLCV timeframe ('1h', '4h', '1d').
-            start_date: Start date for data (None for earliest available).
-            end_date: End date for data (None for latest).
-
-        Returns:
-            DataFrame with OHLCV columns (index=date).
-        """
-        tf = TIMEFRAME_MAP.get(timeframe, timeframe)
-        pair = self._normalize_symbol(symbol, self.quote_currency)
-
-        since_ms = None
-        if start_date is not None:
-            since_ms = int(datetime.combine(start_date, datetime.min.time()).replace(
-                tzinfo=timezone.utc
-            ).timestamp() * 1000)
-
-        end_ms = None
-        if end_date is not None:
-            end_ms = int(datetime.combine(end_date, datetime.max.time()).replace(
-                tzinfo=timezone.utc
-            ).timestamp() * 1000)
-
-        all_candles = self._fetch_paginated(pair, tf, since_ms or 0, end_ms)
-
-        if not all_candles:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(
-            all_candles, columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
-        df["date"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).dt.tz_localize(None)
-        df = df.set_index("date")
-        df = df.drop(columns=["timestamp"])
-
-        if end_ms is not None:
-            df = df[df.index <= pd.Timestamp(end_date)]
-
-        df = df[~df.index.duplicated(keep="first")]
-        df = df.sort_index()
-
-        return df
