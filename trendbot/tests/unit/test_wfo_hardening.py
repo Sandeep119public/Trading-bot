@@ -5,9 +5,8 @@ import pandas as pd
 import pytest
 
 from trendbot.domain.metrics import compute_metrics
-from trendbot.domain.models import WalkForwardConfig
+from trendbot.domain.models import WalkForwardConfig, WalkForwardFold
 from trendbot.domain.walk_forward import _tie_break, validate_no_overlapping_oos
-from trendbot.domain.models import WalkForwardFold
 
 
 def _candidate(sharpe: float, drawdown: float, turnover: float, threshold: float = 0.0):
@@ -18,24 +17,15 @@ def _candidate(sharpe: float, drawdown: float, turnover: float, threshold: float
         "covariance_shrinkage": 0.1,
         "rebalance_threshold": threshold,
     }
-    metrics = {
-        "max_drawdown": drawdown,
-        "avg_daily_turnover": turnover,
-    }
+    metrics = {"max_drawdown": drawdown, "avg_daily_turnover": turnover}
     return sharpe, params, metrics
 
 
 def test_sharpe_tolerance_prefers_lower_drawdown():
-    best = _tie_break(
-        [
-            _candidate(1.20, -0.25, 0.05),
-            _candidate(1.19, -0.10, 0.05),
-        ],
-        sharpe_tolerance=0.02,
-    )
-    assert best["rebalance_threshold"] == 0.0
-    # Both candidates have identical parameters in this fixture; the selection
-    # rule must therefore still be deterministic.
+    first = _candidate(1.20, -0.25, 0.05, 0.0)
+    second = _candidate(1.19, -0.10, 0.05, 0.01)
+    best = _tie_break([first, second], sharpe_tolerance=0.02)
+    assert best["rebalance_threshold"] == 0.01
 
 
 def test_sharpe_tolerance_does_not_hide_material_difference():
