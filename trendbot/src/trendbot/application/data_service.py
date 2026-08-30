@@ -21,8 +21,8 @@ class DataService:
         self._provider = provider
         self._repository = repository
 
-    @staticmethod
-    def _provider_for(request: DataDownloadRequest) -> DataProvider:
+    def _provider_for(self, request: DataDownloadRequest) -> DataProvider:
+        """Resolve the concrete provider for a download request."""
         timeframe = getattr(request, "timeframe", "1d") or "1d"
         if request.source == "binance":
             from trendbot.infrastructure.data_providers.ccxt_provider import CcxtProvider
@@ -39,6 +39,8 @@ class DataService:
         if request.source == "delta_india":
             from trendbot.infrastructure.data_providers.delta_india_provider import DeltaIndiaProvider
             return DeltaIndiaProvider(timeframe=timeframe)
+        if request.source == "yfinance":
+            return self._provider
         raise ValueError(f"Unsupported data source: {request.source}")
 
     def download_data(self, request: DataDownloadRequest) -> DownloadResult:
@@ -68,8 +70,12 @@ class DataService:
 
                 self._repository.save_prices(request.source, normalized, timeframe, df)
                 processed.append(normalized)
-                logger.info("Downloaded %s: %d rows from %s", normalized, len(df), request.source)
-
+                logger.info(
+                    "Downloaded %s: %d rows from %s",
+                    normalized,
+                    len(df),
+                    request.source,
+                )
             except Exception as e:
                 logger.error("Failed to download %s from %s: %s", symbol, request.source, e)
                 failed.append(f"{symbol}: {e}")
