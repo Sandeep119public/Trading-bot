@@ -98,12 +98,15 @@ def run_backtest(
         positions_arr[i] = new_position.values
         previous_position = new_position
 
-    # Position at t-1 earns the market return observed at t. Trading costs at t
-    # are charged at the t execution timestamp, so cost attribution is explicit.
-    for i in range(required_history + 1, n_bars):
-        gross_ret_arr[i] = float(
-            np.dot(positions_arr[i - 1], daily_returns.iloc[i].values)
-        )
+    # Position at t-1 earns the market return observed at t.  Trading costs at
+    # t are charged at the t execution timestamp, so cost attribution is
+    # explicit.  The loop starts at ``required_history`` (not +1) so that the
+    # initial trade cost at that bar is reflected in the net return.
+    for i in range(required_history, n_bars):
+        if i > required_history:
+            gross_ret_arr[i] = float(
+                np.dot(positions_arr[i - 1], daily_returns.iloc[i].values)
+            )
         ret_arr[i] = gross_ret_arr[i] - costs_arr[i]
 
     idx = close.index

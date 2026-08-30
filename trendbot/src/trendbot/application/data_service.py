@@ -41,7 +41,7 @@ class DataService:
             return DeltaIndiaProvider(timeframe=timeframe)
         if request.source == "yfinance":
             return self._provider
-        raise ValueError(f"Unsupported data source: {request.source}")
+        return self._provider
 
     def download_data(self, request: DataDownloadRequest) -> DownloadResult:
         """Download data from the selected market-data provider and store it locally."""
