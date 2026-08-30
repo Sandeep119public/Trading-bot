@@ -11,6 +11,7 @@ import time
 from datetime import date, datetime, timezone
 
 import pandas as pd
+import requests
 
 from trendbot.application.ports import DataProvider
 
@@ -56,19 +57,21 @@ class DeltaIndiaProvider(DataProvider):
         end_date: date | None,
     ) -> pd.DataFrame:
         """Fetch OHLC candles and return a close-price DataFrame."""
-        import requests
-
         contract = self.normalize_symbol(symbol)
         start = int(
             datetime.combine(start_date, datetime.min.time())
             .replace(tzinfo=timezone.utc)
             .timestamp()
         )
-        end = int(
-            datetime.combine(end_date, datetime.max.time())
-            .replace(tzinfo=timezone.utc)
-            .timestamp()
-        ) if end_date is not None else int(datetime.now(timezone.utc).timestamp())
+        end = (
+            int(
+                datetime.combine(end_date, datetime.max.time())
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+            )
+            if end_date is not None
+            else int(datetime.now(timezone.utc).timestamp())
+        )
 
         rows: list[dict] = []
         cursor = start
@@ -96,9 +99,7 @@ class DeltaIndiaProvider(DataProvider):
             if not batch:
                 break
             rows.extend(batch)
-
-            times = [int(item["time"]) for item in batch]
-            last_time = max(times)
+            last_time = max(int(item["time"]) for item in batch)
             if last_time >= end or len(batch) < DELTA_MAX_CANDLES:
                 break
             next_cursor = last_time + 1
@@ -116,26 +117,18 @@ class DeltaIndiaProvider(DataProvider):
         missing = required - set(frame.columns)
         if missing:
             raise ValueError(f"Delta candle response missing fields: {sorted(missing)}")
-
         frame["timestamp"] = pd.to_datetime(frame["time"], unit="s", utc=True)
         frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
         frame = frame.dropna(subset=["timestamp", "close"])
         frame = frame.set_index("timestamp").sort_index()
         frame = frame[~frame.index.duplicated(keep="last")]
-        frame = frame.loc[frame.index <= pd.Timestamp(end_date, tz="UTC")] if end_date else frame
+        if end_date is not None:
+            frame = frame.loc[frame.index <= pd.Timestamp(end_date, tz="UTC")]
         frame.index = frame.index.tz_localize(None)
-        result = frame[["close"]].rename(columns={"close": symbol.upper()})
-
-        logger.info(
-            "Fetched %d rows for %s from Delta Exchange India (contract=%s, tf=%s)",
-            len(result), symbol, contract, self.timeframe,
-        )
-        return result
+        return frame[["close"]].rename(columns={"close": symbol.upper()})
 
     def validate_symbol(self, symbol: str) -> bool:
         """Validate that a Delta product exists and is a futures/perpetual contract."""
-        import requests
-
         contract = self.normalize_symbol(symbol)
         try:
             response = requests.get(
