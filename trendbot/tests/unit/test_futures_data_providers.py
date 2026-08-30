@@ -2,7 +2,10 @@ from datetime import date
 
 import pandas as pd
 
-from trendbot.infrastructure.data_providers.ccxt_provider import BinanceFuturesProvider, CcxtProvider
+from trendbot.infrastructure.data_providers.ccxt_provider import (
+    BinanceFuturesProvider,
+    CcxtProvider,
+)
 from trendbot.infrastructure.data_providers.delta_india_provider import DeltaIndiaProvider
 
 
@@ -36,8 +39,22 @@ def test_delta_candle_response_is_close_series(monkeypatch) -> None:
             return {
                 "success": True,
                 "result": [
-                    {"time": 1704067200, "open": 100, "high": 110, "low": 90, "close": 105, "volume": 1},
-                    {"time": 1704153600, "open": 105, "high": 115, "low": 95, "close": 110, "volume": 2},
+                    {
+                        "time": 1704067200,
+                        "open": 100,
+                        "high": 110,
+                        "low": 90,
+                        "close": 105,
+                        "volume": 1,
+                    },
+                    {
+                        "time": 1704153600,
+                        "open": 105,
+                        "high": 115,
+                        "low": 95,
+                        "close": 110,
+                        "volume": 2,
+                    },
                 ],
             }
 

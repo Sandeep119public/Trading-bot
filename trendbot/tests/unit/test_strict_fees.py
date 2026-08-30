@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from trendbot.domain.backtest import run_backtest
 
@@ -122,7 +121,7 @@ def test_fee_impact_in_metrics():
     gross = pd.Series(np.random.randn(100) * 0.01, index=dates)
     net = gross - 0.001
 
-    gross_metrics = compute_metrics(gross, pd.DataFrame({"A": np.ones(100)}),
+    compute_metrics(gross, pd.DataFrame({"A": np.ones(100)}),
                                      pd.Series(0.01, index=dates),
                                      pd.Series(0.0, index=dates),
                                      gross_returns=gross)

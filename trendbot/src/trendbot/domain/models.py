@@ -216,7 +216,10 @@ class WalkForwardConfig(BaseModel):
     )
     sharpe_tie_tolerance: float = Field(
         default=0.02,
-        description="Training Sharpe difference treated as statistically indistinguishable for tie-breaking.",
+        description=(
+            "Training Sharpe difference treated as"
+            " statistically indistinguishable for tie-breaking."
+        ),
     )
     allow_short: bool = Field(default=True, description="Whether to allow short positions.")
     ann_factor: int = Field(default=365, description="Annualization factor (252 or 365).")

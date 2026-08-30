@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
 
 
@@ -55,7 +53,10 @@ class MockCcxtExchange:
 def test_ccxt_pagination_fetches_all_candles():
     """Verify that ccxt_provider paginates through multiple API calls
     to fetch more candles than a single request allows."""
-    from trendbot.infrastructure.data_providers.ccxt_provider import CcxtProvider, BINANCE_MAX_CANDLES
+    from trendbot.infrastructure.data_providers.ccxt_provider import (
+        BINANCE_MAX_CANDLES,
+        CcxtProvider,
+    )
 
     mock_exchange = MockCcxtExchange(max_candles=BINANCE_MAX_CANDLES, total_data=2500)
 

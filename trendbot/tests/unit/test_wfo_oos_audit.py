@@ -11,30 +11,22 @@ Covers:
 
 from __future__ import annotations
 
-import copy
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from trendbot.domain.backtest import run_backtest
 from trendbot.domain.models import (
     ParameterGrid,
     WalkForwardConfig,
-    WalkForwardFold,
 )
 from trendbot.domain.walk_forward import (
-    _held_positions,
     _required_history,
-    enumerate_parameter_combinations,
     generate_folds,
     run_oos_fold,
     run_walk_forward,
     select_parameters,
-    stitch_oos_returns,
     validate_no_overlapping_oos,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -91,7 +83,7 @@ def synthetic_close():
 # ===========================================================================
 
 
-class TestLeakageA_OOSDataModification:
+class TestLeakageAOosDataModification:
     """Modifying prices ONLY inside the OOS period must NOT change selected parameters."""
 
     def test_oos_modification_preserves_params(
@@ -135,7 +127,7 @@ class TestLeakageA_OOSDataModification:
         assert not result_base.oos_returns.equals(result_mod.oos_returns)
 
 
-class TestLeakageB_FutureFoldModification:
+class TestLeakageBFutureFoldModification:
     """Modifying data AFTER the current fold's entire context must not change selected params.
 
     Important: with rolling/overlapping train windows, modifying a future fold's
@@ -164,7 +156,7 @@ class TestLeakageB_FutureFoldModification:
         assert params_base == params_mod
 
 
-class TestLeakageC_TrainingDataModification:
+class TestLeakageCTrainingDataModification:
     """Modifying training data MUST change selected parameters when the grid is fine enough."""
 
     def test_training_modification_changes_params(
@@ -287,14 +279,16 @@ class TestWarmupContext:
         params, _, _ = select_parameters(train_close, small_grid, wfo_config)
 
         full_close = synthetic_close.iloc[fold.train_start_idx:fold.test_end_idx]
-        result = run_oos_fold(full_close, fold, params, wfo_config)
+        run_oos_fold(full_close, fold, params, wfo_config)
 
         req = _required_history(params, wfo_config)
         assert req <= fold.train_length, (
             f"required_history ({req}) must be <= train_length ({fold.train_length})"
         )
 
-    def test_training_context_available_for_oos_warmup(self, synthetic_close, small_grid, wfo_config):
+    def test_training_context_available_for_oos_warmup(
+        self, synthetic_close, small_grid, wfo_config,
+    ):
         folds = generate_folds(len(synthetic_close), wfo_config)
         fold = folds[0]
         train_close = synthetic_close.iloc[fold.train_start_idx:fold.train_end_idx]

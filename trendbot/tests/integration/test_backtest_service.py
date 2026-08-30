@@ -48,7 +48,11 @@ def test_full_backtest(backtest_service):
         momentum=MomentumParams(lookbacks=[5, 10], allow_short=True),
         volatility=VolatilityParams(vol_window=21, ann_factor=365),
         risk=RiskParams(target_portfolio_vol=0.10, max_gross_leverage=1.0),
-        execution=ExecutionParams(taker_fee_pct=0.001, slippage_pct=0.0005, rebalance_threshold=0.01),
+        execution=ExecutionParams(
+            taker_fee_pct=0.001,
+            slippage_pct=0.0005,
+            rebalance_threshold=0.01,
+        ),
         backtest=BacktestParams(min_history=30, benchmark="equal_weight"),
     )
 
@@ -70,7 +74,11 @@ def test_backtest_no_data(backtest_service):
         momentum=MomentumParams(lookbacks=[5], allow_short=True),
         volatility=VolatilityParams(vol_window=21, ann_factor=365),
         risk=RiskParams(target_portfolio_vol=0.10, max_gross_leverage=1.0),
-        execution=ExecutionParams(taker_fee_pct=0.001, slippage_pct=0.0005, rebalance_threshold=0.01),
+        execution=ExecutionParams(
+            taker_fee_pct=0.001,
+            slippage_pct=0.0005,
+            rebalance_threshold=0.01,
+        ),
         backtest=BacktestParams(min_history=30, benchmark="none"),
     )
 

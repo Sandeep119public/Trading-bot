@@ -42,7 +42,11 @@ def compute_metrics(
     max_dd = (cumulative / running_max - 1).min()
     win_rate = (active > 0).sum() / len(active)
 
-    active_positions = positions.iloc[start_idx:] if len(positions) > start_idx else positions.iloc[:0]
+    active_positions = (
+        positions.iloc[start_idx:]
+        if len(positions) > start_idx
+        else positions.iloc[:0]
+    )
     gross_exposure = active_positions.abs().sum(axis=1)
     avg_gross = gross_exposure.mean() if len(gross_exposure) else 0.0
 

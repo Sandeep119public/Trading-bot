@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 
 from trendbot.domain.sensitivity import (
-    _scale_lookbacks,
     _format_lookback_label,
+    _scale_lookbacks,
     compute_plateau_metrics,
     run_sensitivity_analysis,
 )

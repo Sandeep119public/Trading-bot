@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pandas as pd
 
@@ -18,7 +18,12 @@ TIMEFRAME_MAP = {"1h": "1h", "4h": "4h", "1d": "1d"}
 class CcxtProvider(DataProvider):
     """Data provider using CCXT for Binance spot market data."""
 
-    def __init__(self, quote_currency: str = "USDT", timeframe: str = "1d", rate_limit: bool = True) -> None:
+    def __init__(
+        self,
+        quote_currency: str = "USDT",
+        timeframe: str = "1d",
+        rate_limit: bool = True,
+    ) -> None:
         self.quote_currency = quote_currency.upper()
         self.timeframe = self._validate_timeframe(timeframe)
         self._exchange = self._create_exchange("spot", rate_limit)
@@ -40,11 +45,19 @@ class CcxtProvider(DataProvider):
             options = {"defaultType": market_type}
             if market_type == "future":
                 options["defaultSubType"] = "linear"
-            return exchange_class({"enableRateLimit": rate_limit, "options": options})
+            return exchange_class({
+                "enableRateLimit": rate_limit,
+                "options": options,
+            })
         except ImportError as exc:
-            raise ImportError("ccxt is required for Binance data. Install with: pip install ccxt") from exc
+            raise ImportError(
+                "ccxt is required for Binance data."
+                " Install with: pip install ccxt"
+            ) from exc
         except AttributeError as exc:
-            raise ValueError("Exchange 'binance' not found in ccxt") from exc
+            raise ValueError(
+                "Exchange 'binance' not found in ccxt"
+            ) from exc
 
     @staticmethod
     def _normalize_symbol(symbol: str, quote_currency: str = "USDT") -> str:
@@ -65,27 +78,66 @@ class CcxtProvider(DataProvider):
     def _sanitize_for_path(symbol: str) -> str:
         return symbol.replace("/", "-")
 
-    def fetch_daily_close_prices(self, symbol: str, start_date: date, end_date: date | None) -> pd.DataFrame:
+    def fetch_daily_close_prices(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date | None,
+    ) -> pd.DataFrame:
         pair = self._normalize_symbol(symbol, self.quote_currency)
-        since_ms = int(datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc).timestamp() * 1000)
-        end_ms = None if end_date is None else int(datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc).timestamp() * 1000)
-        all_ohlcv = self._fetch_paginated(pair, self.timeframe, since_ms, end_ms)
+        since_ms = int(
+            datetime.combine(start_date, datetime.min.time())
+            .replace(tzinfo=UTC)
+            .timestamp()
+            * 1000
+        )
+        end_ms = (
+            None
+            if end_date is None
+            else int(
+                datetime.combine(end_date, datetime.max.time())
+                .replace(tzinfo=UTC)
+                .timestamp()
+                * 1000
+            )
+        )
+        all_ohlcv = self._fetch_paginated(
+            pair, self.timeframe, since_ms, end_ms
+        )
         if not all_ohlcv:
-            raise ValueError(f"No data returned for symbol '{symbol}' on Binance")
-        df = pd.DataFrame(all_ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["date"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).dt.tz_localize(None)
+            raise ValueError(
+                f"No data returned for symbol '{symbol}' on Binance"
+            )
+        df = pd.DataFrame(
+            all_ohlcv,
+            columns=["timestamp", "open", "high", "low", "close", "volume"],
+        )
+        df["date"] = pd.to_datetime(
+            df["timestamp"], unit="ms", utc=True
+        ).dt.tz_localize(None)
         df = df.set_index("date")[["close"]]
         if end_ms is not None:
             df = df[df.index <= pd.Timestamp(end_date)]
         df = df[~df.index.duplicated(keep="first")].sort_index()
         return df.rename(columns={"close": symbol.upper()})
 
-    def _fetch_paginated(self, pair: str, timeframe: str, since_ms: int, end_ms: int | None) -> list[list]:
+    def _fetch_paginated(
+        self,
+        pair: str,
+        timeframe: str,
+        since_ms: int,
+        end_ms: int | None,
+    ) -> list[list]:
         all_candles: list[list] = []
         current_since = since_ms
         while True:
-            params = {"endTime": end_ms} if end_ms is not None else {}
-            candles = self._fetch_with_retry(pair, timeframe, current_since, BINANCE_MAX_CANDLES, params, 3)
+            params = (
+                {"endTime": end_ms} if end_ms is not None else {}
+            )
+            candles = self._fetch_with_retry(
+                pair, timeframe, current_since,
+                BINANCE_MAX_CANDLES, params, 3,
+            )
             if not candles:
                 break
             all_candles.extend(candles)
@@ -96,22 +148,44 @@ class CcxtProvider(DataProvider):
                 break
             next_since = last_timestamp + 1
             if next_since <= current_since:
-                raise RuntimeError(f"Binance pagination stalled for {pair}")
+                raise RuntimeError(
+                    f"Binance pagination stalled for {pair}"
+                )
             current_since = next_since
         return all_candles
 
-    def _fetch_with_retry(self, pair: str, timeframe: str, since_ms: int, limit: int, params: dict, max_retries: int) -> list[list]:
+    def _fetch_with_retry(
+        self,
+        pair: str,
+        timeframe: str,
+        since_ms: int,
+        limit: int,
+        params: dict,
+        max_retries: int,
+    ) -> list[list]:
         last_error: Exception | None = None
         for attempt in range(max_retries):
             try:
-                return self._exchange.fetch_ohlcv(symbol=pair, timeframe=timeframe, since=since_ms, limit=limit, params=params)
+                return self._exchange.fetch_ohlcv(
+                    symbol=pair,
+                    timeframe=timeframe,
+                    since=since_ms,
+                    limit=limit,
+                    params=params,
+                )
             except Exception as exc:
                 last_error = exc
-                logger.warning("Attempt %d/%d failed for %s: %s", attempt + 1, max_retries, pair, exc)
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s",
+                    attempt + 1, max_retries, pair, exc,
+                )
                 if attempt < max_retries - 1:
                     import time
                     time.sleep(min(2**attempt, 10))
-        raise RuntimeError(f"Failed to fetch {pair} after {max_retries} retries: {last_error}")
+        raise RuntimeError(
+            f"Failed to fetch {pair} after"
+            f" {max_retries} retries: {last_error}"
+        )
 
     def validate_symbol(self, symbol: str) -> bool:
         try:
@@ -125,18 +199,27 @@ class CcxtProvider(DataProvider):
 class BinanceFuturesProvider(CcxtProvider):
     """Binance USD-M perpetual/futures provider using CCXT linear markets."""
 
-    def __init__(self, quote_currency: str = "USDT", timeframe: str = "1d", rate_limit: bool = True) -> None:
+    def __init__(
+        self,
+        quote_currency: str = "USDT",
+        timeframe: str = "1d",
+        rate_limit: bool = True,
+    ) -> None:
         self.quote_currency = quote_currency.upper()
         self.timeframe = self._validate_timeframe(timeframe)
         self._exchange = self._create_exchange("future", rate_limit)
 
     @staticmethod
-    def _normalize_symbol(symbol: str, quote_currency: str = "USDT") -> str:
+    def _normalize_symbol(
+        symbol: str, quote_currency: str = "USDT"
+    ) -> str:
         value = symbol.upper().strip()
         if "/" in value:
             base, quote = value.split("/", 1)
             quote = quote.split(":", 1)[0]
-            return f"{base}/{quote}:{quote}" if quote in {"USDT", "USDC"} else f"{base}/{quote}:USDT"
+            if quote in {"USDT", "USDC"}:
+                return f"{base}/{quote}:{quote}"
+            return f"{base}/{quote}:USDT"
         if "-" in value:
             base, quote = value.split("-", 1)
             if quote in {"USD", "USDT", "USDC"}:

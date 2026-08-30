@@ -73,7 +73,7 @@ def render_backtest_page(
             try:
                 dto = backtest_service.run(request)
             except ValueError as e:
-                st.error(f"Data integrity check failed:")
+                st.error("Data integrity check failed:")
                 st.warning(str(e))
                 return
             except Exception as e:

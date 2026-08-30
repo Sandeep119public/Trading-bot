@@ -104,7 +104,10 @@ def _render_heatmap_section(
     if st.button("Run Sensitivity Analysis", type="primary", key="run_sensitivity_btn"):
         _run_analysis(selected_symbols, data_service)
 
-    if "sensitivity_results" in st.session_state and st.session_state.sensitivity_results is not None:
+    if (
+        "sensitivity_results" in st.session_state
+        and st.session_state.sensitivity_results is not None
+    ):
         _render_results()
 
 
@@ -135,7 +138,10 @@ def _run_analysis(selected_symbols: list[str], data_service: DataService) -> Non
         st.error("No price data available for the selected universe.")
         return
 
-    with st.spinner(f"Running {len(lookback_multipliers) * len(vol_windows) * len(target_vols)} backtests..."):
+    n_backtests = (
+        len(lookback_multipliers) * len(vol_windows) * len(target_vols)
+    )
+    with st.spinner(f"Running {n_backtests} backtests..."):
         results_df = run_sensitivity_analysis(
             close=close,
             base_lookbacks=request.momentum.lookbacks,

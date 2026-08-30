@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pandas as pd
 import requests
@@ -60,17 +60,17 @@ class DeltaIndiaProvider(DataProvider):
         contract = self.normalize_symbol(symbol)
         start = int(
             datetime.combine(start_date, datetime.min.time())
-            .replace(tzinfo=timezone.utc)
+            .replace(tzinfo=UTC)
             .timestamp()
         )
         end = (
             int(
                 datetime.combine(end_date, datetime.max.time())
-                .replace(tzinfo=timezone.utc)
+                .replace(tzinfo=UTC)
                 .timestamp()
             )
             if end_date is not None
-            else int(datetime.now(timezone.utc).timestamp())
+            else int(datetime.now(UTC).timestamp())
         )
 
         rows: list[dict] = []

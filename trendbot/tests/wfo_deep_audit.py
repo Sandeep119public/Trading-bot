@@ -5,14 +5,12 @@ Run with: python -m tests.wfo_deep_audit
 
 from __future__ import annotations
 
-import sys
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from trendbot.domain.backtest import run_backtest, compute_benchmark_returns
+from trendbot.domain.backtest import compute_benchmark_returns
 from trendbot.domain.metrics import compute_metrics
 from trendbot.domain.models import ParameterGrid, WalkForwardConfig
 from trendbot.domain.walk_forward import (
@@ -99,7 +97,7 @@ def audit_parameter_optimization(grid: ParameterGrid) -> None:
     print(f"  covariance_shrinkage opts:  {len(grid.covariance_shrinkage)}")
     print(f"  rebalance_threshold opts:   {len(grid.rebalance_threshold)}")
     print(f"  TOTAL CANDIDATES:           {len(combos)}")
-    print(f"  Optimization objective:     Training Sharpe ratio")
+    print("  Optimization objective:     Training Sharpe ratio")
 
 
 # ===========================================================================
@@ -126,8 +124,8 @@ def audit_multiple_testing(
                 continue
             try:
                 from trendbot.domain.walk_forward import (
-                    _run_backtest_safely,
                     _candidate_is_eligible,
+                    _run_backtest_safely,
                     _training_metrics,
                 )
                 bt = _run_backtest_safely(train_close, params, config)
@@ -186,7 +184,11 @@ def audit_degradation(report) -> None:
     print(f"\n{'='*70}")
     print("PHASE 9: TRAIN vs OOS DEGRADATION")
     print(f"{'='*70}")
-    print(f"  {'Fold':>4} | {'Train Shrp':>10} | {'OOS Shrp':>9} | {'Degrad%':>8} | {'Train CAGR':>10} | {'OOS CAGR':>9}")
+    print(
+        f"  {'Fold':>4} | {'Train Shrp':>10} | "
+        f"{'OOS Shrp':>9} | {'Degrad%':>8} | "
+        f"{'Train CAGR':>10} | {'OOS CAGR':>9}"
+    )
     print(f"  {'-'*4}-+-{'-'*10}-+-{'-'*9}-+-{'-'*8}-+-{'-'*10}-+-{'-'*9}")
 
     for fr in report.folds:
@@ -229,13 +231,13 @@ def audit_benchmarks(close: pd.DataFrame, report, config: WalkForwardConfig) -> 
                 costs=pd.Series(0.0, index=active_bench.index),
                 ann_factor=config.ann_factor,
             )
-            print(f"  Equal-weight benchmark:")
+            print("  Equal-weight benchmark:")
             print(f"    CAGR:        {fmt_pct(bench_metrics['cagr'])}")
             print(f"    Sharpe:      {fmt_float(bench_metrics['sharpe_ratio'])}")
             print(f"    Max DD:      {fmt_pct(bench_metrics['max_drawdown'])}")
 
     oos_metrics = report.aggregate_metrics
-    print(f"  Strategy OOS:")
+    print("  Strategy OOS:")
     print(f"    CAGR:        {fmt_pct(oos_metrics['cagr'])}")
     print(f"    Sharpe:      {fmt_float(oos_metrics['sharpe_ratio'])}")
     print(f"    Max DD:      {fmt_pct(oos_metrics['max_drawdown'])}")
@@ -281,7 +283,11 @@ def audit_cost_sensitivity(close: pd.DataFrame) -> None:
 
     cost_multipliers = [0.0, 0.5, 1.0, 2.0, 3.0]
     print(f"  Using fold 0 with params: {params}")
-    print(f"  {'Mult':>5} | {'OOS CAGR':>9} | {'OOS Shrp':>9} | {'OOS MaxDD':>9} | {'Turnover':>9} | {'CostDrag':>9}")
+    print(
+        f"  {'Mult':>5} | {'OOS CAGR':>9} | "
+        f"{'OOS Shrp':>9} | {'OOS MaxDD':>9} | "
+        f"{'Turnover':>9} | {'CostDrag':>9}"
+    )
     print(f"  {'-'*5}-+-{'-'*9}-+-{'-'*9}-+-{'-'*9}-+-{'-'*9}-+-{'-'*9}")
 
     for mult in cost_multipliers:
@@ -429,11 +435,11 @@ def audit_null_test(close: pd.DataFrame) -> None:
             t_stat = excess / null_std
             print(f"  t-statistic:       {fmt_float(t_stat)}")
             if t_stat > 2.0:
-                print(f"  Verdict: REAL signal appears to exceed noise (t > 2)")
+                print("  Verdict: REAL signal appears to exceed noise (t > 2)")
             elif t_stat > 1.0:
-                print(f"  Verdict: MARGINAL - some excess over noise (1 < t < 2)")
+                print("  Verdict: MARGINAL - some excess over noise (1 < t < 2)")
             else:
-                print(f"  Verdict: WEAK - signal does not clearly exceed noise (t < 1)")
+                print("  Verdict: WEAK - signal does not clearly exceed noise (t < 1)")
 
 
 # ===========================================================================
@@ -550,7 +556,7 @@ def audit_portfolio_risk(report) -> None:
     all_costs = pd.concat([fr.oos_costs for fr in report.folds])
 
     gross_exp = all_positions.abs().sum(axis=1)
-    print(f"  Target volatility:     10.00%")
+    print("  Target volatility:     10.00%")
 
     oos_ret = report.stitched_oos_returns
     if len(oos_ret) > 1:
@@ -558,7 +564,7 @@ def audit_portfolio_risk(report) -> None:
         print(f"  Realized volatility:   {fmt_pct(realized_vol)}")
     else:
         realized_vol = 0.0
-        print(f"  Realized volatility:   N/A")
+        print("  Realized volatility:   N/A")
 
     print(f"  Avg gross exposure:    {fmt_float(gross_exp.mean())}")
     print(f"  Max gross exposure:    {fmt_float(gross_exp.max())}")

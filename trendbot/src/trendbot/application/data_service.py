@@ -37,7 +37,9 @@ class DataService:
                 timeframe=timeframe,
             )
         if request.source == "delta_india":
-            from trendbot.infrastructure.data_providers.delta_india_provider import DeltaIndiaProvider
+            from trendbot.infrastructure.data_providers.delta_india_provider import (
+                DeltaIndiaProvider,
+            )
             return DeltaIndiaProvider(timeframe=timeframe)
         if request.source == "yfinance":
             return self._provider
@@ -104,8 +106,14 @@ class DataService:
         for symbol in symbols:
             try:
                 df = self._repository.load_prices(source, symbol, timeframe, start_date, end_date)
-                if not df.empty and "close" in df.columns:
+                if df.empty:
+                    logger.warning("No close data for %s", symbol)
+                elif "close" in df.columns:
                     frames[symbol] = df["close"]
+                elif symbol.upper() in df.columns:
+                    frames[symbol] = df[symbol.upper()]
+                elif len(df.columns) == 1:
+                    frames[symbol] = df.iloc[:, 0]
                 else:
                     logger.warning("No close data for %s", symbol)
             except Exception as e:
