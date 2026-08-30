@@ -15,60 +15,46 @@ def compute_metrics(
     gross_returns: pd.Series | None = None,
     min_history: int = 0,
 ) -> dict[str, float]:
-    """Compute comprehensive backtest performance metrics.
-
-    Args:
-        returns: Strategy daily returns (net of fees).
-        positions: Position weights over time.
-        turnover: Daily turnover.
-        costs: Daily trading costs.
-        ann_factor: Annualization factor.
-        gross_returns: Strategy daily returns before fees (optional, for fee diagnostics).
-        min_history: Number of warmup bars to exclude from statistics.
-
-    Returns:
-        Dictionary of performance metrics including fee impact diagnostics.
-    """
+    """Compute performance metrics using only the active return interval."""
     if len(returns) == 0:
         return _empty_metrics()
+    if ann_factor <= 0:
+        raise ValueError("ann_factor must be positive")
 
-    start_idx = max(1, min_history)
-
+    start_idx = max(0, min_history)
     active = returns.iloc[start_idx:] if len(returns) > start_idx else returns.iloc[:0]
     if len(active) == 0:
         return _empty_metrics()
 
     total_return = max(float((1 + active).prod() - 1), -0.999999)
     n_years = len(active) / ann_factor
-    cagr = (1 + total_return) ** (1 / max(n_years, 1e-10)) - 1
-
+    cagr = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
     ann_return = active.mean() * ann_factor
     ann_vol = active.std() * np.sqrt(ann_factor) if len(active) > 1 else 0.0
     sharpe = ann_return / ann_vol if ann_vol > 0 else 0.0
 
     downside_diff = np.minimum(0, active.values)
-    downside_vol = np.sqrt(np.mean(downside_diff ** 2)) * np.sqrt(ann_factor) if len(active) > 0 else 0.0
+    downside_vol = np.sqrt(np.mean(downside_diff**2)) * np.sqrt(ann_factor)
     sortino = ann_return / downside_vol if downside_vol > 0 else 0.0
 
     cumulative = (1 + active).cumprod()
     running_max = cumulative.cummax()
-    drawdown = cumulative / running_max - 1
-    max_dd = drawdown.min()
-
-    win_rate = (active > 0).sum() / len(active) if len(active) > 0 else 0.0
+    max_dd = (cumulative / running_max - 1).min()
+    win_rate = (active > 0).sum() / len(active)
 
     active_positions = positions.iloc[start_idx:] if len(positions) > start_idx else positions.iloc[:0]
     gross_exposure = active_positions.abs().sum(axis=1)
-    avg_gross = gross_exposure.mean()
+    avg_gross = gross_exposure.mean() if len(gross_exposure) else 0.0
 
     active_turnover = turnover.iloc[start_idx:] if len(turnover) > start_idx else turnover.iloc[:0]
-    avg_turnover = active_turnover.mean()
-    total_cost_drag = costs.sum()
+    avg_turnover = active_turnover.mean() if len(active_turnover) else 0.0
+
+    active_costs = costs.iloc[start_idx:] if len(costs) > start_idx else costs.iloc[:0]
+    total_cost_drag = float(active_costs.sum())
 
     total_gross_return = 0.0
     total_net_return = float(total_return)
     fee_drag_pct = 0.0
-
     if gross_returns is not None and len(gross_returns) > start_idx:
         active_gross = gross_returns.iloc[start_idx:]
         if len(active_gross) > 0:
@@ -90,7 +76,7 @@ def compute_metrics(
         "daily_win_rate": float(win_rate),
         "avg_gross_exposure": float(avg_gross),
         "avg_daily_turnover": float(avg_turnover),
-        "total_cost_drag": float(total_cost_drag),
+        "total_cost_drag": total_cost_drag,
         "total_gross_return": total_gross_return,
         "total_net_return": total_net_return,
         "fee_drag_pct": float(fee_drag_pct),
@@ -117,15 +103,7 @@ def _empty_metrics() -> dict[str, float]:
 
 
 def compute_monthly_returns(returns: pd.Series, ann_factor: int = 365) -> pd.DataFrame:
-    """Compute monthly return heatmap data.
-
-    Args:
-        returns: Daily strategy returns.
-        ann_factor: Annualization factor.
-
-    Returns:
-        DataFrame with years as rows, months as columns.
-    """
+    """Compute monthly return heatmap data."""
     df = returns.to_frame("return")
     df["year"] = df.index.year
     df["month"] = df.index.month
@@ -136,14 +114,7 @@ def compute_monthly_returns(returns: pd.Series, ann_factor: int = 365) -> pd.Dat
 
 
 def compute_drawdown_series(returns: pd.Series) -> pd.Series:
-    """Compute drawdown time series.
-
-    Args:
-        returns: Daily strategy returns.
-
-    Returns:
-        Series of drawdown values.
-    """
+    """Compute drawdown time series."""
     cumulative = (1 + returns).cumprod()
     running_max = cumulative.cummax()
     return cumulative / running_max - 1
