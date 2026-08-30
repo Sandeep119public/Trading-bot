@@ -16,6 +16,7 @@ dependencies = [
     "PyYAML>=6.0",
     "yfinance>=0.2.30",
     "ccxt>=4.0",
+    "requests>=2.31",
     "streamlit>=1.30",
     "plotly>=5.18",
     "pyarrow>=14.0",
