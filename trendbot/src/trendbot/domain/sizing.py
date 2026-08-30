@@ -65,7 +65,9 @@ def apply_leverage_cap(
         DataFrame of capped weights.
     """
     gross = weights.abs().sum(axis=1)
-    scale = np.where(gross > max_gross_leverage, max_gross_leverage / gross, 1.0)
+    safe_gross = gross.replace(0, np.nan)
+    scale = np.where(safe_gross > max_gross_leverage, max_gross_leverage / safe_gross, 1.0)
+    scale = np.nan_to_num(scale, nan=0.0)
     return weights.multiply(scale, axis=0)
 
 

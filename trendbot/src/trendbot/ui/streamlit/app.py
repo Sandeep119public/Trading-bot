@@ -27,6 +27,7 @@ from trendbot.ui.streamlit.pages.backtest_page import render_backtest_page
 from trendbot.ui.streamlit.pages.data_page import render_data_page
 from trendbot.ui.streamlit.pages.diagnostics_page import render_diagnostics_page
 from trendbot.ui.streamlit.pages.results_page import render_results_page
+from trendbot.ui.streamlit.pages.sensitivity_page import render_sensitivity_page
 from trendbot.ui.streamlit.state import init_state, reset_defaults
 
 st.set_page_config(
@@ -81,11 +82,12 @@ with st.sidebar:
         st.rerun()
 
 # Main content - Tabs
-tab_data, tab_strategy, tab_backtest, tab_results, tab_diag = st.tabs([
+tab_data, tab_strategy, tab_backtest, tab_results, tab_sens, tab_diag = st.tabs([
     "Data Manager",
     "Strategy Parameters",
     "Backtest",
     "Results",
+    "Sensitivity",
     "Diagnostics",
 ])
 
@@ -102,6 +104,9 @@ with tab_backtest:
 
 with tab_results:
     render_results_page()
+
+with tab_sens:
+    render_sensitivity_page(data_service, backtest_service, selected_symbols)
 
 with tab_diag:
     render_diagnostics_page(data_service, selected_symbols)

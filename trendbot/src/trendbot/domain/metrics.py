@@ -42,12 +42,13 @@ def compute_metrics(
     n_years = len(active) / ann_factor
     cagr = (1 + total_return) ** (1 / max(n_years, 1e-10)) - 1
 
+    ann_return = active.mean() * ann_factor
     ann_vol = active.std() * np.sqrt(ann_factor)
-    sharpe = cagr / ann_vol if ann_vol > 0 else 0.0
+    sharpe = ann_return / ann_vol if ann_vol > 0 else 0.0
 
     downside = active[active < 0]
     downside_vol = downside.std() * np.sqrt(ann_factor) if len(downside) > 0 else 0.0
-    sortino = cagr / downside_vol if downside_vol > 0 else 0.0
+    sortino = ann_return / downside_vol if downside_vol > 0 else 0.0
 
     cumulative = (1 + active).cumprod()
     running_max = cumulative.cummax()

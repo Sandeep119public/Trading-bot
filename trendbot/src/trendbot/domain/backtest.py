@@ -136,7 +136,11 @@ def compute_benchmark_returns(
     if benchmark_type == "none":
         return None
 
-    daily_returns = close / close.shift(1) - 1
+    coverage = close.notna().mean()
+    well_covered = coverage[coverage > 0.8].index
+    filtered_close = close[well_covered]
+
+    daily_returns = filtered_close / filtered_close.shift(1) - 1
     bench = daily_returns.mean(axis=1)
 
     n_bars = len(close)
