@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from trendbot.application.data_service import DataService
@@ -22,7 +23,7 @@ def render_data_page(data_service: DataService) -> None:
         st.info("No datasets downloaded yet.")
         return
 
-    df = __import__("pandas").DataFrame([d.model_dump() for d in datasets])
+    df = pd.DataFrame([d.model_dump() for d in datasets])
     display_cols = [
         "source", "symbol", "timeframe", "start_date", "end_date", "rows", "last_updated",
     ]
