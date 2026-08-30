@@ -36,6 +36,8 @@ def default_config():
         test_window=30,
         step=30,
         minimum_training_bars=60,
+        minimum_training_observations=0,
+        minimum_training_trades=0,
         ann_factor=365,
         target_portfolio_vol=0.10,
         max_gross_leverage=1.0,
@@ -496,16 +498,16 @@ class TestReturnStitching:
         )
 
         results = []
-        for i in range(3):
+        for i in range(2):
             fold = WalkForwardFold(
                 fold_index=i,
-                train_start_idx=i * 20,
-                train_end_idx=i * 20 + 80,
-                test_start_idx=i * 20 + 80,
-                test_end_idx=i * 20 + 110,
+                train_start_idx=i * 40,
+                train_end_idx=i * 40 + 80,
+                test_start_idx=i * 40 + 80,
+                test_end_idx=i * 40 + 110,
             )
             full_close = synthetic_close_short.iloc[
-                i * 20 : i * 20 + 110
+                i * 40 : i * 40 + 110
             ]
             results.append(
                 run_oos_fold(
@@ -523,8 +525,14 @@ class TestReturnStitching:
 
     def test_stitch_equity_curve(self):
         """Equity curve must be cumulative product of (1 + returns)."""
-        r1 = pd.Series([0.01, 0.02, -0.01])
-        r2 = pd.Series([0.005, 0.01])
+        r1 = pd.Series(
+            [0.01, 0.02, -0.01],
+            index=pd.date_range("2023-01-01", periods=3),
+        )
+        r2 = pd.Series(
+            [0.005, 0.01],
+            index=pd.date_range("2023-01-04", periods=2),
+        )
         fake_result1 = FoldResult(
             fold=WalkForwardFold(0, 0, 10, 10, 13),
             selected_parameters={"lookbacks": [5]},
