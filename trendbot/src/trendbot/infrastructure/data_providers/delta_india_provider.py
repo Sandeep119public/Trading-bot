@@ -50,13 +50,13 @@ class DeltaIndiaProvider(DataProvider):
             return f"{value[:-4]}USD"
         return value
 
-    def fetch_daily_close_prices(
+    def _fetch_candles(
         self,
         symbol: str,
         start_date: date,
         end_date: date | None,
     ) -> pd.DataFrame:
-        """Fetch OHLC candles and return a close-price DataFrame."""
+        """Fetch OHLCV candles from Delta and return a DataFrame."""
         contract = self.normalize_symbol(symbol)
         start = int(
             datetime.combine(start_date, datetime.min.time())
@@ -119,13 +119,37 @@ class DeltaIndiaProvider(DataProvider):
             raise ValueError(f"Delta candle response missing fields: {sorted(missing)}")
         frame["timestamp"] = pd.to_datetime(frame["time"], unit="s", utc=True)
         frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+        if "volume" in frame.columns:
+            frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0.0)
+        else:
+            frame["volume"] = 0.0
         frame = frame.dropna(subset=["timestamp", "close"])
         frame = frame.set_index("timestamp").sort_index()
         frame = frame[~frame.index.duplicated(keep="last")]
         if end_date is not None:
             frame = frame.loc[frame.index <= pd.Timestamp(end_date, tz="UTC")]
         frame.index = frame.index.tz_localize(None)
-        return frame[["close"]].rename(columns={"close": symbol.upper()})
+        return frame
+
+    def fetch_daily_close_prices(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        """Fetch OHLC candles and return a close-price DataFrame."""
+        df = self._fetch_candles(symbol, start_date, end_date)
+        return df[["close"]].rename(columns={"close": symbol.upper()})
+
+    def fetch_daily_volume(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        """Fetch OHLC candles and return a base-volume DataFrame."""
+        df = self._fetch_candles(symbol, start_date, end_date)
+        return df[["volume"]].rename(columns={"volume": symbol.upper()})
 
     def validate_symbol(self, symbol: str) -> bool:
         """Validate that a Delta product exists and is a futures/perpetual contract."""

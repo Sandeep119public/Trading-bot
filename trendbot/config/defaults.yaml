@@ -7,9 +7,17 @@ data:
   overwrite: false
 
 universe:
-  - BTCUSD
-  - ETHUSD
-  - SOLUSD
+  mode: static
+  symbols:
+    - BTCUSD
+    - ETHUSD
+    - SOLUSD
+  top_n: 50
+  liquidity_window: 21
+  rebalance_frequency: monthly
+  rebalance_day: 1
+  exclude_stablecoins: true
+  min_volume_days: 15
 
 strategy:
   lookbacks:

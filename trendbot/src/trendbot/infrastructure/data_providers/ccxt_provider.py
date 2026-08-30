@@ -78,12 +78,13 @@ class CcxtProvider(DataProvider):
     def _sanitize_for_path(symbol: str) -> str:
         return symbol.replace("/", "-")
 
-    def fetch_daily_close_prices(
+    def _fetch_ohlcv(
         self,
         symbol: str,
         start_date: date,
         end_date: date | None,
     ) -> pd.DataFrame:
+        """Fetch raw OHLCV data and return a DataFrame with close + volume."""
         pair = self._normalize_symbol(symbol, self.quote_currency)
         since_ms = int(
             datetime.combine(start_date, datetime.min.time())
@@ -115,11 +116,29 @@ class CcxtProvider(DataProvider):
         df["date"] = pd.to_datetime(
             df["timestamp"], unit="ms", utc=True
         ).dt.tz_localize(None)
-        df = df.set_index("date")[["close"]]
+        df = df.set_index("date")[["close", "volume"]]
         if end_ms is not None:
             df = df[df.index <= pd.Timestamp(end_date)]
         df = df[~df.index.duplicated(keep="first")].sort_index()
-        return df.rename(columns={"close": symbol.upper()})
+        return df
+
+    def fetch_daily_close_prices(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        df = self._fetch_ohlcv(symbol, start_date, end_date)
+        return df[["close"]].rename(columns={"close": symbol.upper()})
+
+    def fetch_daily_volume(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        df = self._fetch_ohlcv(symbol, start_date, end_date)
+        return df[["volume"]].rename(columns={"volume": symbol.upper()})
 
     def _fetch_paginated(
         self,

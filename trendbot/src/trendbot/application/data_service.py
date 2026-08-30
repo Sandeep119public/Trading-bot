@@ -71,6 +71,18 @@ class DataService:
                     continue
 
                 self._repository.save_prices(request.source, normalized, timeframe, df)
+
+                try:
+                    vol_df = provider.fetch_daily_volume(
+                        normalized, request.start_date, request.end_date
+                    )
+                    if not vol_df.empty:
+                        self._repository.save_volume(
+                            request.source, normalized, timeframe, vol_df
+                        )
+                except (AttributeError, NotImplementedError):
+                    pass
+
                 processed.append(normalized)
                 logger.info(
                     "Downloaded %s: %d rows from %s",
@@ -121,6 +133,38 @@ class DataService:
 
         if not frames:
             raise ValueError("No price data could be loaded for the requested universe")
+        return pd.DataFrame(frames).dropna(how="all")
+
+    def load_volume_data(
+        self,
+        source: str,
+        symbols: list[str],
+        timeframe: str,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        """Load base-volume panel for multiple stored symbols."""
+        frames: dict[str, pd.Series] = {}
+        for symbol in symbols:
+            try:
+                df = self._repository.load_volume(
+                    source, symbol, timeframe, start_date, end_date
+                )
+                if df.empty:
+                    logger.warning("No volume data for %s", symbol)
+                elif "volume" in df.columns:
+                    frames[symbol] = df["volume"]
+                elif symbol.upper() in df.columns:
+                    frames[symbol] = df[symbol.upper()]
+                elif len(df.columns) == 1:
+                    frames[symbol] = df.iloc[:, 0]
+                else:
+                    logger.warning("No volume data for %s", symbol)
+            except Exception as e:
+                logger.warning("Failed to load volume for %s: %s", symbol, e)
+
+        if not frames:
+            return pd.DataFrame()
         return pd.DataFrame(frames).dropna(how="all")
 
     def delete_dataset(self, source: str, symbol: str, timeframe: str = "1d") -> None:

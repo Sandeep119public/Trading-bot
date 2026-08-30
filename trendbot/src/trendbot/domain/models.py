@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BenchmarkType(StrEnum):
@@ -155,6 +155,109 @@ class DatasetMetadata(BaseModel):
     downloaded_at: str
     last_updated: str
     file_path: str
+
+
+# ---------------------------------------------------------------------------
+# Universe configuration
+# ---------------------------------------------------------------------------
+
+
+class UniverseMode(StrEnum):
+    STATIC = "static"
+    DYNAMIC_TOP_N = "dynamic_top_n"
+
+
+class UniverseConfig(BaseModel):
+    """Configuration for historical universe reconstruction."""
+
+    mode: UniverseMode = Field(
+        default=UniverseMode.STATIC,
+        description="Universe selection mode: static list or dynamic top-N by liquidity.",
+    )
+    symbols: list[str] = Field(
+        default_factory=list,
+        description="Static symbol list (used when mode=static).",
+    )
+    top_n: int = Field(
+        default=50,
+        description="Number of assets in dynamic top-N universe.",
+    )
+    liquidity_window: int = Field(
+        default=21,
+        description="Trailing window in days for rolling dollar volume.",
+    )
+    rebalance_frequency: str = Field(
+        default="monthly",
+        description="Reconstitution frequency: 'monthly' only for now.",
+    )
+    rebalance_day: int = Field(
+        default=1,
+        description="Day of month for universe reconstitution.",
+    )
+    exclude_stablecoins: bool = Field(
+        default=True,
+        description="Whether to exclude stablecoin assets from universe.",
+    )
+    min_volume_days: int = Field(
+        default=15,
+        description=(
+            "Minimum number of valid volume observations in the trailing "
+            "window for an asset to be ranked."
+        ),
+    )
+
+    @field_validator("top_n")
+    @classmethod
+    def validate_top_n(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("top_n must be positive")
+        return v
+
+    @field_validator("liquidity_window")
+    @classmethod
+    def validate_liquidity_window(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("liquidity_window must be positive")
+        return v
+
+    @field_validator("rebalance_frequency")
+    @classmethod
+    def validate_rebalance_frequency(cls, v: str) -> str:
+        if v not in ("monthly",):
+            raise ValueError("rebalance_frequency must be 'monthly'")
+        return v
+
+    @field_validator("rebalance_day")
+    @classmethod
+    def validate_rebalance_day(cls, v: int) -> int:
+        if v < 1 or v > 28:
+            raise ValueError("rebalance_day must be between 1 and 28")
+        return v
+
+    @field_validator("min_volume_days")
+    @classmethod
+    def validate_min_volume_days(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("min_volume_days must be non-negative")
+        return v
+
+
+# ---------------------------------------------------------------------------
+# Backtest universe diagnostics
+# ---------------------------------------------------------------------------
+
+
+class UniverseSnapshot(BaseModel):
+    """Snapshot of universe state at a single rebalance date."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    date: pd.Timestamp
+    members: list[str]
+    rankings: dict[str, int]
+    dollar_volumes_21d: dict[str, float]
+    entries: list[str]
+    exits: list[str]
 
 
 class BacktestResult(BaseModel):

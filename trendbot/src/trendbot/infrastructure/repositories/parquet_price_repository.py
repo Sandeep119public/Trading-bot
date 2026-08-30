@@ -29,6 +29,10 @@ class ParquetPriceRepository(PriceRepository):
         safe_symbol = symbol.replace("/", "-")
         return self._raw_dir / source / f"{safe_symbol}_{timeframe}.parquet"
 
+    def _volume_path(self, source: str, symbol: str, timeframe: str) -> Path:
+        safe_symbol = symbol.replace("/", "-")
+        return self._raw_dir / source / f"{safe_symbol}_{timeframe}_volume.parquet"
+
     def _meta_path(self, source: str, symbol: str, timeframe: str) -> Path:
         safe_symbol = symbol.replace("/", "-")
         return self._meta_dir / f"{source}_{safe_symbol}_{timeframe}.json"
@@ -71,6 +75,19 @@ class ParquetPriceRepository(PriceRepository):
 
         logger.info("Saved %s/%s/%s: %d rows", source, symbol, timeframe, len(df))
 
+    def save_volume(
+        self,
+        source: str,
+        symbol: str,
+        timeframe: str,
+        df: pd.DataFrame,
+    ) -> None:
+        """Save volume data as a separate Parquet file."""
+        path = self._volume_path(source, symbol, timeframe)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(path)
+        logger.info("Saved volume %s/%s/%s: %d rows", source, symbol, timeframe, len(df))
+
     def load_prices(
         self,
         source: str,
@@ -97,6 +114,31 @@ class ParquetPriceRepository(PriceRepository):
         path = self._parquet_path(source, symbol, timeframe)
         if not path.exists():
             raise FileNotFoundError(f"No data found for {source}/{symbol}/{timeframe}")
+
+        df = pd.read_parquet(path)
+
+        if start_date is not None:
+            df = df[df.index >= pd.Timestamp(start_date)]
+        if end_date is not None:
+            df = df[df.index <= pd.Timestamp(end_date)]
+
+        return df
+
+    def load_volume(
+        self,
+        source: str,
+        symbol: str,
+        timeframe: str,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> pd.DataFrame:
+        """Load volume data from Parquet file.
+
+        Returns empty DataFrame if no volume data exists.
+        """
+        path = self._volume_path(source, symbol, timeframe)
+        if not path.exists():
+            return pd.DataFrame()
 
         df = pd.read_parquet(path)
 

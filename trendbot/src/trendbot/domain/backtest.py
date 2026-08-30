@@ -24,8 +24,19 @@ def run_backtest(
     min_history: int,
     covariance_window: int = 60,
     covariance_shrinkage: float = 0.1,
+    universe_schedule: dict[pd.Timestamp, list[str]] | None = None,
 ) -> dict[str, pd.DataFrame | pd.Series]:
-    """Run the multi-horizon trend-following backtest causally."""
+    """Run the multi-horizon trend-following backtest causally.
+
+    Args:
+        universe_schedule: Optional precomputed universe schedule mapping
+            each date to its list of eligible assets.  When provided, only
+            assets in the current universe are considered for signal/risk/
+            portfolio construction at each bar.  Assets exiting the universe
+            are automatically liquidated (target weight = 0).  When None,
+            all columns in ``close`` are used (backward-compatible static
+            universe mode).
+    """
     columns = close.columns.tolist()
     n_bars = len(close)
     daily_returns = (close / close.shift(1) - 1).fillna(0.0)
@@ -53,11 +64,34 @@ def run_backtest(
         historical_returns = daily_returns.iloc[history_start:i]
         price_history = close.iloc[: i + 1]
 
+        # Dynamic universe filtering: restrict to eligible assets at this bar.
+        current_bar_date = close.index[i]
+        if universe_schedule is not None:
+            if current_bar_date in universe_schedule:
+                active_columns = [
+                    c for c in universe_schedule[current_bar_date]
+                    if c in columns
+                ]
+            else:
+                prior_dates = [
+                    d for d in universe_schedule if d <= current_bar_date
+                ]
+                if prior_dates:
+                    latest = max(prior_dates)
+                    active_columns = [
+                        c for c in universe_schedule[latest]
+                        if c in columns
+                    ]
+                else:
+                    active_columns = list(columns)
+        else:
+            active_columns = list(columns)
+
         signal_df = compute_momentum_signals(price_history, lookbacks, allow_short)
-        signals = signal_df.iloc[-1].reindex(columns).fillna(0.0)
+        signals = signal_df.iloc[-1].reindex(active_columns).fillna(0.0)
 
         asset_vol_df = compute_asset_volatility(price_history, vol_window, ann_factor)
-        asset_vols = asset_vol_df.iloc[-1].reindex(columns)
+        asset_vols = asset_vol_df.iloc[-1].reindex(active_columns)
 
         valid = (
             asset_vols.notna()
@@ -79,6 +113,13 @@ def run_backtest(
             fallback_vols=asset_vols,
             ann_factor=ann_factor,
         ).reindex(columns).fillna(0.0)
+
+        # Force target=0 for assets not in the current universe.
+        # This generates liquidation trades when assets exit.
+        if universe_schedule is not None:
+            inactive = [c for c in columns if c not in active_columns]
+            for c in inactive:
+                target[c] = 0.0
 
         diff = (target - previous_position).abs()
         execute_mask = diff > rebalance_threshold
