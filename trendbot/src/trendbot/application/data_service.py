@@ -21,59 +21,57 @@ class DataService:
         self._provider = provider
         self._repository = repository
 
+    @staticmethod
+    def _provider_for(request: DataDownloadRequest) -> DataProvider:
+        timeframe = getattr(request, "timeframe", "1d") or "1d"
+        if request.source == "binance":
+            from trendbot.infrastructure.data_providers.ccxt_provider import CcxtProvider
+            return CcxtProvider(
+                quote_currency=getattr(request, "quote_currency", "USDT"),
+                timeframe=timeframe,
+            )
+        if request.source == "binance_futures":
+            from trendbot.infrastructure.data_providers.ccxt_provider import BinanceFuturesProvider
+            return BinanceFuturesProvider(
+                quote_currency=getattr(request, "quote_currency", "USDT"),
+                timeframe=timeframe,
+            )
+        if request.source == "delta_india":
+            from trendbot.infrastructure.data_providers.delta_india_provider import DeltaIndiaProvider
+            return DeltaIndiaProvider(timeframe=timeframe)
+        raise ValueError(f"Unsupported data source: {request.source}")
+
     def download_data(self, request: DataDownloadRequest) -> DownloadResult:
-        """Download data from provider and store locally.
-
-        Args:
-            request: Data download request with source, symbols, dates.
-
-        Returns:
-            DownloadResult with success status and details.
-        """
+        """Download data from the selected market-data provider and store it locally."""
         processed: list[str] = []
         failed: list[str] = []
         timeframe = getattr(request, "timeframe", "1d") or "1d"
+        provider = self._provider_for(request)
 
         for symbol in request.symbols:
             try:
+                normalized = symbol.strip().upper()
                 if not request.overwrite and self._repository.dataset_exists(
-                    request.source, symbol, timeframe
+                    request.source, normalized, timeframe
                 ):
-                    logger.info("Skipping %s (already exists, overwrite=False)", symbol)
-                    processed.append(symbol)
+                    logger.info("Skipping %s (already exists, overwrite=False)", normalized)
+                    processed.append(normalized)
                     continue
 
-                if request.source == "binance":
-                    from trendbot.infrastructure.data_providers.ccxt_provider import (
-                        CcxtProvider,
-                    )
-
-                    provider = CcxtProvider(
-                        quote_currency=getattr(request, "quote_currency", "USDT"),
-                        timeframe=timeframe,
-                    )
-                    df = provider.fetch_daily_close_prices(
-                        symbol, request.start_date, request.end_date
-                    )
-                    # Sanitize symbol for Parquet storage (remove slashes)
-                    save_symbol = CcxtProvider._sanitize_for_path(symbol)
-                else:
-                    df = self._provider.fetch_daily_close_prices(
-                        symbol, request.start_date, request.end_date
-                    )
-                    save_symbol = symbol
-
+                df = provider.fetch_daily_close_prices(
+                    normalized, request.start_date, request.end_date
+                )
                 if df.empty:
-                    logger.warning("Empty data for %s", symbol)
-                    failed.append(f"{symbol}: empty data")
+                    logger.warning("Empty data for %s", normalized)
+                    failed.append(f"{normalized}: empty data")
                     continue
 
-                self._repository.save_prices(request.source, save_symbol, timeframe, df)
-                processed.append(symbol)
-                logger.info("Downloaded %s: %d rows", symbol, len(df))
+                self._repository.save_prices(request.source, normalized, timeframe, df)
+                processed.append(normalized)
+                logger.info("Downloaded %s: %d rows from %s", normalized, len(df), request.source)
 
             except Exception as e:
-                logger.error("Failed to download %s: %s", symbol, e)
+                logger.error("Failed to download %s from %s: %s", symbol, request.source, e)
                 failed.append(f"{symbol}: {e}")
 
         return DownloadResult(
@@ -95,23 +93,8 @@ class DataService:
         start_date: date | None,
         end_date: date | None,
     ) -> pd.DataFrame:
-        """Load price panel for multiple symbols.
-
-        Args:
-            source: Data source name.
-            symbols: List of ticker symbols.
-            timeframe: Data timeframe.
-            start_date: Start date filter.
-            end_date: End date filter.
-
-        Returns:
-            DataFrame with close prices (index=date, columns=symbols).
-
-        Raises:
-            ValueError: If no data could be loaded.
-        """
+        """Load close-price panel for multiple stored symbols."""
         frames: dict[str, pd.Series] = {}
-
         for symbol in symbols:
             try:
                 df = self._repository.load_prices(source, symbol, timeframe, start_date, end_date)
@@ -124,10 +107,7 @@ class DataService:
 
         if not frames:
             raise ValueError("No price data could be loaded for the requested universe")
-
-        panel = pd.DataFrame(frames)
-        panel = panel.dropna(how="all")
-        return panel
+        return pd.DataFrame(frames).dropna(how="all")
 
     def delete_dataset(self, source: str, symbol: str, timeframe: str = "1d") -> None:
         """Delete a stored dataset."""
