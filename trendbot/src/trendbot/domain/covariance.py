@@ -10,51 +10,45 @@ def estimate_covariance(
     returns: pd.DataFrame,
     shrinkage: float = 0.1,
     fallback_vols: pd.Series | None = None,
+    ann_factor: int = 365,
 ) -> pd.DataFrame:
-    """Estimate the covariance matrix from a returns DataFrame.
+    """Estimate an annualized covariance matrix from daily returns.
 
-    CONTRACT: The caller MUST ensure ``returns`` contains only information
-    available at or before time t-1 to prevent lookahead bias.
-
-    Args:
-        returns: DataFrame of daily returns (index=date, columns=assets).
-        shrinkage: Shrinkage intensity towards the diagonal (0 = none, 1 = pure diagonal).
-        fallback_vols: Asset volatilities used to build a diagonal covariance
-            matrix when history is insufficient. If None, a default variance
-            of 0.0001 is used.
-
-    Returns:
-        Positive-definite covariance matrix as a DataFrame.
+    The caller must provide a history containing no future information. The
+    returned covariance matrix is always annualized, matching annualized asset
+    volatilities and annualized target volatility.
     """
-    clean_returns = returns.dropna()
+    if not 0.0 <= shrinkage <= 1.0:
+        raise ValueError("shrinkage must be between 0 and 1")
+    if ann_factor <= 0:
+        raise ValueError("ann_factor must be positive")
+
+    columns = returns.columns
+    clean_returns = returns.loc[:, columns].dropna(how="any")
 
     if clean_returns.empty or len(clean_returns) < 5:
         if fallback_vols is not None:
-            aligned_vols = fallback_vols.reindex(returns.columns).fillna(0.01)
-            variances = aligned_vols.values ** 2
-            return pd.DataFrame(
-                np.diag(variances),
-                index=returns.columns,
-                columns=returns.columns,
-            )
-        default_var = 0.01 ** 2
-        return pd.DataFrame(
-            np.eye(len(returns.columns)) * default_var,
-            index=returns.columns,
-            columns=returns.columns,
-        )
+            aligned_vols = fallback_vols.reindex(columns).fillna(0.01)
+        else:
+            aligned_vols = pd.Series(0.01, index=columns, dtype=float)
 
-    sample_cov = clean_returns.cov().values.copy()
+        aligned_vols = aligned_vols.astype(float).clip(lower=1e-8)
+        variances = aligned_vols.to_numpy() ** 2
+        return pd.DataFrame(np.diag(variances), index=columns, columns=columns)
 
-    if shrinkage > 0:
-        diag = np.diag(np.diag(sample_cov))
-        sample_cov = (1 - shrinkage) * sample_cov + shrinkage * diag
+    # Input returns are daily. Convert the sample covariance to annual units.
+    sample_cov = clean_returns.cov().to_numpy(dtype=float) * float(ann_factor)
 
-    # Force positive definiteness via nugget effect
-    try:
-        np.linalg.cholesky(sample_cov)
-    except np.linalg.LinAlgError:
-        epsilon = 1e-5
-        sample_cov += np.eye(len(sample_cov)) * epsilon
+    if shrinkage > 0.0:
+        diagonal = np.diag(np.diag(sample_cov))
+        sample_cov = (1.0 - shrinkage) * sample_cov + shrinkage * diagonal
 
-    return pd.DataFrame(sample_cov, index=returns.columns, columns=returns.columns)
+    # Stabilize the matrix while preserving its scale.
+    sample_cov = (sample_cov + sample_cov.T) / 2.0
+    eigenvalues, eigenvectors = np.linalg.eigh(sample_cov)
+    floor = max(float(np.max(np.diag(sample_cov))) * 1e-10, 1e-12)
+    eigenvalues = np.maximum(eigenvalues, floor)
+    stable_cov = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
+    stable_cov = (stable_cov + stable_cov.T) / 2.0
+
+    return pd.DataFrame(stable_cov, index=columns, columns=columns)
