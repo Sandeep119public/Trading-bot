@@ -44,7 +44,7 @@ def run_backtest(
     Returns:
         Dictionary with keys: returns, positions, executed_weights, turnover, costs.
     """
-    daily_returns = close / close.shift(1) - 1
+    daily_returns = (close / close.shift(1) - 1).fillna(0.0)
 
     score_norm = compute_momentum_signals(close, lookbacks, allow_short)
     asset_vol = compute_asset_volatility(close, vol_window, ann_factor)

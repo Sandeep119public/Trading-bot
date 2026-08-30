@@ -99,17 +99,12 @@ class BacktestService:
 
         # Check for misaligned dates across assets
         if close.shape[1] > 1:
-            date_sets = {col: set(close[col].dropna().index) for col in close.columns}
-            reference = date_sets[list(date_sets.keys())[0]]
-            for col, dates in date_sets.items():
-                missing_dates = reference - dates
-                if len(missing_dates) > 0:
-                    sample = sorted(missing_dates)[:3]
-                    sample_str = ", ".join(str(d.date()) for d in sample)
-                    issues.append(
-                        f"Asset '{col}' missing {len(missing_dates)} dates "
-                        f"(e.g., {sample_str})"
-                    )
+            all_dates = [set(close[col].dropna().index) for col in close.columns]
+            if not all(dates == all_dates[0] for dates in all_dates):
+                issues.append(
+                    "Assets have misaligned dates "
+                    "(some assets are missing trading days present in others)"
+                )
 
         if issues:
             raise ValueError(

@@ -26,10 +26,12 @@ class ParquetPriceRepository(PriceRepository):
         self._meta_dir.mkdir(parents=True, exist_ok=True)
 
     def _parquet_path(self, source: str, symbol: str, timeframe: str) -> Path:
-        return self._raw_dir / source / f"{symbol}_{timeframe}.parquet"
+        safe_symbol = symbol.replace("/", "-")
+        return self._raw_dir / source / f"{safe_symbol}_{timeframe}.parquet"
 
     def _meta_path(self, source: str, symbol: str, timeframe: str) -> Path:
-        return self._meta_dir / f"{source}_{symbol}_{timeframe}.json"
+        safe_symbol = symbol.replace("/", "-")
+        return self._meta_dir / f"{source}_{safe_symbol}_{timeframe}.json"
 
     def save_prices(
         self,
